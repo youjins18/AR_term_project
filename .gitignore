@@ -1,0 +1,3 @@
+__pycache__/
+*.pyc
+chr_controller/third_party/generated_*

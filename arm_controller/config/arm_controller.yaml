@@ -1,0 +1,8 @@
+arm_controller:
+  ros__parameters:
+    control_hz: 250.0
+    reference_timeout_s: 0.5
+    gravity_compensation: true
+    joint_kp: [20.0, 20.0, 16.0]
+    joint_kd: [1.2, 1.2, 1.0]
+    default_joint_position: [0.0, 0.0, 0.0]

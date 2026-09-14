@@ -1,0 +1,9 @@
+chr_mujoco:
+  ros__parameters:
+    physics_hz: 500.0
+    publish_hz: 250.0
+    realtime_factor: 1.0
+    render: true
+    command_timeout_s: 0.2
+    initial_base_position: [0.0, 0.0, 1.2]
+    initial_joint_position: [0.0, 0.0, 0.0]

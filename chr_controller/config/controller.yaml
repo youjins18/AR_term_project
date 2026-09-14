@@ -1,0 +1,11 @@
+chr_controller:
+  ros__parameters:
+    planner_mode: hold
+    command_hz: 100.0
+    default_base_position: [0.0, 0.0, 1.2]
+    default_base_rpy: [0.0, 0.0, 0.0]
+    default_joint_position: [0.0, 0.0, 0.0]
+    dls_damping: 0.03
+    dls_tolerance_m: 0.0001
+    dls_maximum_step_rad: 0.12
+    dls_maximum_iterations: 100

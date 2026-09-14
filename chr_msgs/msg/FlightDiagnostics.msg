@@ -1,0 +1,7 @@
+std_msgs/Header header
+geometry_msgs/Wrench desired_wrench
+geometry_msgs/Wrench disturbance_estimate
+float64[4] allocated_thrust
+float64[4] allocated_servo_angle
+float64 allocation_residual_norm
+bool saturated
