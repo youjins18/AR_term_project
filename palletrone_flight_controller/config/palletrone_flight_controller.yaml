@@ -8,7 +8,9 @@ palletrone_flight_controller:
     position_kd: [4.0, 4.0, 5.0]
     position_integral_limit: [1.0, 1.0, 1.0]
     attitude_kp: [8.0, 8.0, 4.0]
+    attitude_ki: [3.0, 3.0, 1.0]
     attitude_kd: [2.0, 2.0, 1.2]
+    attitude_integral_limit: [0.5, 0.5, 0.5]
     inertia_diagonal_kg_m2: [0.18, 0.18, 0.20]
     dob_enabled: false
     dob_cutoff_hz: 8.0

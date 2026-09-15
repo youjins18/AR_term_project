@@ -13,7 +13,7 @@ workspace is a minimal but extensible ROS 2 Humble and MuJoCo control skeleton.
 | `chr_controller` | high-level 9-coordinate planning, FK/Jacobian/DLS-IK |
 | `palletrone_flight_controller` | base-pose PID, attitude PD, DOB and allocation |
 | `arm_controller` | bounded J1--J3 pass-through position command |
-| `chr_commander` | intentionally blank keyboard command boundary |
+| `chr_commander` | interactive TCP position and attitude keyboard commands |
 | `bringup` | launch composition |
 
 The data flow is deliberately one-way:
@@ -54,13 +54,25 @@ Safe hold mode:
 ros2 launch bringup simulation.launch.py planner_mode:=hold render:=true
 ```
 
-DLS arm-position IK mode:
+DLS whole-body TCP pose IK mode:
 
 ```bash
 ros2 launch bringup simulation.launch.py planner_mode:=dls_ik render:=true
 ros2 topic pub --once /chr/target/tcp_pose geometry_msgs/msg/PoseStamped \
   "{header: {frame_id: world}, pose: {position: {x: 0.20, y: 0.10, z: 0.45}, orientation: {w: 1.0}}}"
 ```
+
+Interactive keyboard teleop (starts the full stack in `dls_ik` mode and opens a
+dedicated terminal):
+
+```bash
+ros2 launch bringup teleop.launch.py render:=true
+```
+
+Keys are `W/S` X, `A/D` Y, `R/F` Z, `I/K` roll, `J/L` pitch and `U/O` yaw.
+Position increments are expressed in the world frame; attitude increments use
+the current TCP-local axes. Press `Space` to hold the measured pose, `0` for the
+startup pose, and `Q` or `Esc` to quit.
 
 Whole-body external planner/RL boundary:
 
@@ -80,7 +92,7 @@ normalizes the quaternion and clamps arm joint limits before republishing.
   for the physical attachment transform.
 - RL should publish through the `external` target contract. Do not let a policy
   write MuJoCo actuators directly; keep limits and low-level control in place.
-- The DLS solver controls TCP position with the arm at a fixed desired base pose.
-  Whole-body IK can extend the same library with a 3x9 or 6x9 weighted Jacobian.
+- The pose DLS solver owns the complete 9-coordinate command and uses a weighted
+  6x9 Jacobian. Tune its coordinate scales before aggressive flight motion.
 - `third_party/dynamics_gen_chr.py` is a reduced-order reference only. Identify
   coupled inertial parameters before enabling model-based feedforward or NMPC.

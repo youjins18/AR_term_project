@@ -6,7 +6,8 @@ and publishes only `/chr/actuator/palletrone`.
 The node contains:
 
 1. world-frame position PID with gravity feedforward;
-2. quaternion attitude PD;
+2. quaternion attitude PID with bounded integral compensation for the suspended
+   arm's static gravity moment;
 3. an optional, disabled-by-default torque disturbance observer;
 4. X-configuration roll/pitch/yaw thrust allocation followed by tangent-axis
    horizontal-force tilt allocation and actuator saturation.

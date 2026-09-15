@@ -103,7 +103,10 @@ class PalletroneFlightController final : public rclcpp::Node {
     position_kd_ = vector_parameter("position_kd", {4.0, 4.0, 5.0});
     position_integral_limit_ = vector_parameter("position_integral_limit", {1.0, 1.0, 1.0});
     attitude_kp_ = vector_parameter("attitude_kp", {8.0, 8.0, 4.0});
+    attitude_ki_ = vector_parameter("attitude_ki", {3.0, 3.0, 1.0});
     attitude_kd_ = vector_parameter("attitude_kd", {2.0, 2.0, 1.2});
+    attitude_integral_limit_ = vector_parameter(
+      "attitude_integral_limit", {0.5, 0.5, 0.5});
     inertia_ = vector_parameter("inertia_diagonal_kg_m2", {0.18, 0.18, 0.20});
     dob_gain_ = vector_parameter("dob_gain", {0.0, 0.0, 0.0});
     dob_enabled_ = declare_parameter("dob_enabled", false);
@@ -249,8 +252,15 @@ class PalletroneFlightController final : public rclcpp::Node {
     const Vec3 desired_omega{
       reference_->base_twist.angular.x, reference_->base_twist.angular.y,
       reference_->base_twist.angular.z};
+    const Vec3 attitude_error = orientation_error(current, desired);
+    for (std::size_t i = 0; i < attitude_integral_.size(); ++i) {
+      attitude_integral_[i] = std::clamp(
+        attitude_integral_[i] + attitude_error[i] / control_hz_,
+        -attitude_integral_limit_[i], attitude_integral_limit_[i]);
+    }
     Vec3 body_torque = add(
-      multiply(attitude_kp_, orientation_error(current, desired)),
+      add(multiply(attitude_kp_, attitude_error),
+        multiply(attitude_ki_, attitude_integral_)),
       multiply(attitude_kd_, subtract(desired_omega, omega)));
 
     constexpr double pi = 3.14159265358979323846;
@@ -309,7 +319,10 @@ class PalletroneFlightController final : public rclcpp::Node {
   Vec3 position_integral_limit_{};
   Vec3 position_integral_{};
   Vec3 attitude_kp_{};
+  Vec3 attitude_ki_{};
   Vec3 attitude_kd_{};
+  Vec3 attitude_integral_limit_{};
+  Vec3 attitude_integral_{};
   Vec3 inertia_{};
   Vec3 dob_gain_{};
   Vec3 disturbance_estimate_{};

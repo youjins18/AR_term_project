@@ -26,6 +26,20 @@ class ChrController final : public rclcpp::Node {
     const auto joints = vector_parameter("default_joint_position", {0.0, 0.0, 0.0});
     ik_options_.damping = declare_parameter("dls_damping", 0.03);
     ik_options_.tolerance_m = declare_parameter("dls_tolerance_m", 1e-4);
+    ik_options_.orientation_tolerance_rad = declare_parameter(
+      "dls_orientation_tolerance_rad", 0.01);
+    ik_options_.orientation_weight_m_per_rad = declare_parameter(
+      "dls_orientation_weight_m_per_rad", 0.25);
+    ik_options_.base_translation_scale = declare_parameter(
+      "dls_base_translation_scale", 0.35);
+    ik_options_.base_rotation_scale = declare_parameter(
+      "dls_base_rotation_scale", 0.5);
+    if (ik_options_.orientation_tolerance_rad <= 0.0 ||
+        ik_options_.orientation_weight_m_per_rad <= 0.0 ||
+        ik_options_.base_translation_scale <= 0.0 ||
+        ik_options_.base_rotation_scale <= 0.0) {
+      throw std::runtime_error("DLS pose tolerances, weights and coordinate scales must be positive");
+    }
     ik_options_.maximum_step_rad = declare_parameter("dls_maximum_step_rad", 0.12);
     ik_options_.maximum_iterations = static_cast<std::size_t>(
       declare_parameter("dls_maximum_iterations", 100));
@@ -85,22 +99,35 @@ class ChrController final : public rclcpp::Node {
       RCLCPP_ERROR(get_logger(), "TCP target frame must be 'world'; target rejected");
       return;
     }
-    const auto world_from_base = chr_controller::ChrKinematics::base_pose(
-      desired_base_position_, desired_base_orientation_);
-    const Eigen::Vector3d target_position(
-      target->pose.position.x, target->pose.position.y, target->pose.position.z);
-    const auto result = chr_controller::ChrKinematics::solve_position_dls(
-      world_from_base, target_position, desired_joint_position_, ik_options_);
+    Eigen::Quaterniond target_orientation(
+      target->pose.orientation.w, target->pose.orientation.x,
+      target->pose.orientation.y, target->pose.orientation.z);
+    if (target_orientation.norm() < 1e-9) {
+      RCLCPP_ERROR(get_logger(), "TCP target quaternion has zero norm; target rejected");
+      return;
+    }
+    Eigen::Isometry3d target_pose = Eigen::Isometry3d::Identity();
+    target_pose.translate(Eigen::Vector3d(
+      target->pose.position.x, target->pose.position.y, target->pose.position.z));
+    target_pose.rotate(target_orientation.normalized());
+    const auto result = chr_controller::ChrKinematics::solve_pose_dls(
+      desired_base_position_, desired_base_orientation_, target_pose,
+      desired_joint_position_, ik_options_);
+    desired_base_position_ = result.base_position;
+    desired_base_orientation_ = result.base_orientation;
     desired_joint_position_ = result.joint_position;
-    last_ik_residual_m_ = result.residual_m;
+    last_ik_residual_m_ = result.position_residual_m;
+    last_ik_orientation_residual_rad_ = result.orientation_residual_rad;
     if (result.converged) {
       RCLCPP_INFO(
-        get_logger(), "DLS-IK converged in %zu iterations; residual=%.6f m",
-        result.iterations, result.residual_m);
+        get_logger(),
+        "pose DLS-IK converged in %zu iterations; position=%.6f m, attitude=%.4f rad",
+        result.iterations, result.position_residual_m, result.orientation_residual_rad);
     } else {
       RCLCPP_WARN(
-        get_logger(), "DLS-IK target is unreachable or singular; using bounded best effort, residual=%.4f m",
-        result.residual_m);
+        get_logger(),
+        "pose DLS-IK target is unreachable or singular; bounded best effort: position=%.4f m, attitude=%.3f rad",
+        result.position_residual_m, result.orientation_residual_rad);
     }
   }
 
@@ -149,6 +176,7 @@ class ChrController final : public rclcpp::Node {
   std::string planner_mode_;
   double command_hz_{100.0};
   double last_ik_residual_m_{0.0};
+  double last_ik_orientation_residual_rad_{0.0};
   chr_controller::IkOptions ik_options_;
   Eigen::Vector3d desired_base_position_{0.0, 0.0, 1.2};
   Eigen::Quaterniond desired_base_orientation_{1.0, 0.0, 0.0, 0.0};

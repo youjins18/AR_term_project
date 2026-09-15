@@ -1,3 +1,8 @@
 chr_keyboard_commander:
   ros__parameters:
-    enabled: false
+    enabled: true
+    translation_step_m: 0.01
+    rotation_step_deg: 3.0
+    poll_hz: 50.0
+    workspace_min: [-1.5, -1.5, 0.05]
+    workspace_max: [1.5, 1.5, 2.5]

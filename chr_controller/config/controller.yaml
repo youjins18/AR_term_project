@@ -7,5 +7,9 @@ chr_controller:
     default_joint_position: [0.0, 0.0, 0.0]
     dls_damping: 0.03
     dls_tolerance_m: 0.0001
+    dls_orientation_tolerance_rad: 0.01
+    dls_orientation_weight_m_per_rad: 0.25
+    dls_base_translation_scale: 0.35
+    dls_base_rotation_scale: 0.5
     dls_maximum_step_rad: 0.12
     dls_maximum_iterations: 100
