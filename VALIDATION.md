@@ -23,8 +23,10 @@ Eigen 3.4 and GCC 11.4.
   are on the order of `1e-6`.
 - DLS recovery of the known configuration `[0.5, 0.3, -0.4]` converges in 14
   iterations to `[0.49926, 0.30136, -0.39991]` with 0.067 mm TCP residual.
-- Weighted 6x9 pose DLS recovers a known translated and rotated TCP target in 6
-  iterations with 0.0129 mm position and 0.000133 rad attitude residual.
+- Constrained 6x7 pose DLS recovers a known translated and rotated TCP target in
+  7 iterations with 0.0054 mm position and 0.000105 rad attitude residual. A
+  deliberately tilted seed still returns a base quaternion with exactly zero
+  roll and pitch components.
 - Raw-terminal keyboard input initializes from measured `/chr/state` and
   publishes cumulative XYZ plus local-roll/pitch/yaw targets to
   `/chr/target/tcp_pose`; terminal settings are restored on quit.
@@ -36,6 +38,12 @@ Eigen 3.4 and GCC 11.4.
   base attitude error from approximately 0.0165 rad to 0.00188 rad. A separate
   12-second hold test remains at `[-0.000123, -0.000015, 1.200185] m` with
   0.000403 rad/s angular speed.
+- DLS teleop maintains exactly zero commanded base roll, pitch and x/y angular
+  velocity while tracking a +10 mm, +3 degree local-RPY TCP command. The physical
+  TCP errors after 15 seconds are 2.26 mm and 0.00221 rad.
+- External-planner input containing nonzero base roll/pitch and x/y angular
+  velocity is projected to `[roll, pitch] = [0, 0]` and `[wx, wy] = [0, 0]` while
+  preserving yaw and yaw rate.
 - With bias feedforward enabled, the measured arm state after 5 seconds is
   `[0.50001, 0.30170, -0.39992]`; base position remains approximately
   `[-0.00191, 0.00011, 1.20071] m`.

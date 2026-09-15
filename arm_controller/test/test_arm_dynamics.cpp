@@ -1,0 +1,20 @@
+// Copyright 2026 mrl_nuc
+// SPDX-License-Identifier: Apache-2.0
+
+#include "arm_controller/arm_dynamics_library.hpp"
+#include "gtest/gtest.h"
+
+TEST(ArmDynamics, JointPositionIsClampedToMjcfLimits) {
+  const auto result = arm_controller::clamp_joint_position({-1.0, 2.0, -2.0});
+  EXPECT_DOUBLE_EQ(result[0], 0.0);
+  EXPECT_DOUBLE_EQ(result[1], 1.5708);
+  EXPECT_DOUBLE_EQ(result[2], -1.5708);
+}
+
+TEST(ArmDynamics, BiasFeedforwardHasExplicitEnableSwitch) {
+  const arm_controller::JointVector bias{1.0, -2.0, 3.0};
+  EXPECT_EQ(arm_controller::select_bias_feedforward(bias, true), bias);
+  EXPECT_EQ(
+    arm_controller::select_bias_feedforward(bias, false),
+    arm_controller::JointVector{});
+}

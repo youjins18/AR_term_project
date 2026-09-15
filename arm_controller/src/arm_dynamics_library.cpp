@@ -1,3 +1,6 @@
+// Copyright 2026 mrl_nuc
+// SPDX-License-Identifier: Apache-2.0
+
 #include "arm_controller/arm_dynamics_library.hpp"
 
 #include <algorithm>

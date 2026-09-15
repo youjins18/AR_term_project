@@ -1,13 +1,17 @@
+// Copyright 2026 mrl_nuc
+// SPDX-License-Identifier: Apache-2.0
+
+#include <termios.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cmath>
 #include <cctype>
+#include <cmath>
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <termios.h>
-#include <unistd.h>
 #include <vector>
 
 #include "chr_msgs/msg/chr_state.hpp"
@@ -16,6 +20,12 @@
 #include "rclcpp/rclcpp.hpp"
 
 namespace {
+constexpr double kPi = 3.14159265358979323846;
+constexpr char kEscape = 27;
+constexpr char kWorldFrame[] = "world";
+constexpr char kStateTopic[] = "/chr/state";
+constexpr char kTcpTargetTopic[] = "/chr/target/tcp_pose";
+
 using Vec3 = std::array<double, 3>;
 using Quaternion = geometry_msgs::msg::Quaternion;
 
@@ -71,7 +81,7 @@ class KeyboardCommander final : public rclcpp::Node {
     enabled_ = declare_parameter("enabled", true);
     translation_step_m_ = declare_parameter("translation_step_m", 0.01);
     const double rotation_step_deg = declare_parameter("rotation_step_deg", 3.0);
-    rotation_step_rad_ = rotation_step_deg * 3.14159265358979323846 / 180.0;
+    rotation_step_rad_ = rotation_step_deg * kPi / 180.0;
     poll_hz_ = declare_parameter("poll_hz", 50.0);
     workspace_min_ = vector_parameter("workspace_min", {-1.5, -1.5, 0.05});
     workspace_max_ = vector_parameter("workspace_max", {1.5, 1.5, 2.5});
@@ -85,9 +95,9 @@ class KeyboardCommander final : public rclcpp::Node {
     }
 
     target_publisher_ = create_publisher<geometry_msgs::msg::PoseStamped>(
-      "/chr/target/tcp_pose", 1);
+      kTcpTargetTopic, 1);
     state_subscriber_ = create_subscription<chr_msgs::msg::ChrState>(
-      "/chr/state", rclcpp::SensorDataQoS(),
+      kStateTopic, rclcpp::SensorDataQoS(),
       std::bind(&KeyboardCommander::receive_state, this, std::placeholders::_1));
 
     if (!enabled_) {
@@ -109,18 +119,26 @@ class KeyboardCommander final : public rclcpp::Node {
     const auto values = declare_parameter<std::vector<double>>(
       name, {defaults[0], defaults[1], defaults[2]});
     if (values.size() != 3) throw std::runtime_error(name + " must contain three values");
+    if (!std::all_of(values.begin(), values.end(), [](double value) {
+        return std::isfinite(value);
+      })) {
+      throw std::runtime_error(name + " must contain only finite values");
+    }
     return {values[0], values[1], values[2]};
   }
 
   void configure_terminal() {
     if (!isatty(STDIN_FILENO)) {
       throw std::runtime_error(
-        "keyboard teleop needs a TTY; run it directly with 'ros2 run chr_commander keyboard_commander'");
+        "keyboard teleop needs a TTY; run it directly with "
+        "'ros2 run chr_commander keyboard_commander'");
     }
     if (tcgetattr(STDIN_FILENO, &original_terminal_) != 0) {
       throw std::runtime_error("failed to read terminal settings");
     }
     termios raw = original_terminal_;
+    // Keep ISIG enabled so Ctrl-C remains available; only canonical buffering
+    // and local echo are disabled for one-key commands.
     raw.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 0;
@@ -155,7 +173,7 @@ class KeyboardCommander final : public rclcpp::Node {
   }
 
   void handle_key(char raw_key) {
-    if (raw_key == 27 || raw_key == 'q' || raw_key == 'Q') {
+    if (raw_key == kEscape || raw_key == 'q' || raw_key == 'Q') {
       RCLCPP_INFO(get_logger(), "keyboard teleop stopped");
       restore_terminal();
       rclcpp::shutdown();
@@ -198,6 +216,7 @@ class KeyboardCommander final : public rclcpp::Node {
   }
 
   void rotate_local(int axis, double angle) {
+    // Right multiplication expresses the increment in the current TCP frame.
     target_pose_.orientation = product(target_pose_.orientation, axis_angle(axis, angle));
   }
 
@@ -213,7 +232,7 @@ class KeyboardCommander final : public rclcpp::Node {
   void publish_target() {
     geometry_msgs::msg::PoseStamped target;
     target.header.stamp = now();
-    target.header.frame_id = "world";
+    target.header.frame_id = kWorldFrame;
     target.pose = target_pose_;
     target_publisher_->publish(target);
   }
@@ -226,7 +245,7 @@ class KeyboardCommander final : public rclcpp::Node {
       "  attitude: I/K +roll/-roll, J/L +pitch/-pitch, U/O +yaw/-yaw\n"
       "  Space: hold measured pose, 0: startup pose, P: print, ?: help, Q/Esc: quit\n"
       "  steps: %.3f m, %.1f deg",
-      translation_step_m_, rotation_step_rad_ * 180.0 / 3.14159265358979323846);
+      translation_step_m_, rotation_step_rad_ * 180.0 / kPi);
   }
 
   void print_target() {
@@ -234,9 +253,9 @@ class KeyboardCommander final : public rclcpp::Node {
     RCLCPP_INFO(
       get_logger(), "target xyz=[%.3f %.3f %.3f] m, rpy=[%.1f %.1f %.1f] deg",
       target_pose_.position.x, target_pose_.position.y, target_pose_.position.z,
-      rpy[0] * 180.0 / 3.14159265358979323846,
-      rpy[1] * 180.0 / 3.14159265358979323846,
-      rpy[2] * 180.0 / 3.14159265358979323846);
+      rpy[0] * 180.0 / kPi,
+      rpy[1] * 180.0 / kPi,
+      rpy[2] * 180.0 / kPi);
   }
 
   bool enabled_{true};

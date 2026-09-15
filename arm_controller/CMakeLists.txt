@@ -27,4 +27,11 @@ install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 install(FILES README.md DESTINATION share/${PROJECT_NAME})
 ament_export_include_directories(include)
 ament_export_libraries(arm_dynamics)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_arm_dynamics test/test_arm_dynamics.cpp)
+  target_link_libraries(test_arm_dynamics arm_dynamics)
+endif()
+
 ament_package()

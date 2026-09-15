@@ -1,3 +1,6 @@
+// Copyright 2026 mrl_nuc
+// SPDX-License-Identifier: Apache-2.0
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -117,6 +120,7 @@ class PalletroneFlightController final : public rclcpp::Node {
     maximum_thrust_n_ = declare_parameter("maximum_thrust_n", 25.0);
     maximum_servo_angle_rad_ = declare_parameter("maximum_servo_angle_rad", 0.6);
     reference_timeout_s_ = declare_parameter("reference_timeout_s", 0.5);
+    validate_parameters();
 
     state_subscriber_ = create_subscription<chr_msgs::msg::ChrState>(
       "/chr/state", 1, [this](const chr_msgs::msg::ChrState::SharedPtr message) {
@@ -143,7 +147,22 @@ class PalletroneFlightController final : public rclcpp::Node {
     if (values.size() != 3) {
       throw std::runtime_error(name + " must contain exactly three values");
     }
+    if (!std::all_of(values.begin(), values.end(), [](double value) {
+        return std::isfinite(value);
+      })) {
+      throw std::runtime_error(name + " must contain only finite values");
+    }
     return {values[0], values[1], values[2]};
+  }
+
+  void validate_parameters() const {
+    if (control_hz_ <= 0.0 || mass_kg_ <= 0.0 || gravity_ <= 0.0 ||
+        dob_cutoff_hz_ <= 0.0 || rotor_radius_m_ <= 0.0 ||
+        reaction_coefficient_ <= 0.0 || maximum_servo_angle_rad_ <= 0.0 ||
+        reference_timeout_s_ <= 0.0 || minimum_thrust_n_ < 0.0 ||
+        maximum_thrust_n_ <= minimum_thrust_n_) {
+      throw std::runtime_error("invalid physical, rate, timeout, or actuator-limit parameter");
+    }
   }
 
   Allocation allocate(const Vec3 &body_force, const Vec3 &body_torque) const {
@@ -152,6 +171,8 @@ class PalletroneFlightController final : public rclcpp::Node {
       body_force[2] / 4.0, body_force[2] / 4.0};
     bool saturated = false;
 
+    // Apply each torque component sequentially and preserve its direction if a
+    // rotor reaches a limit; this avoids clipping individual motors afterward.
     const auto apply_delta = [&](const Vec4 &delta) {
       double factor = 1.0;
       for (std::size_t i = 0; i < vertical.size(); ++i) {
@@ -184,7 +205,8 @@ class PalletroneFlightController final : public rclcpp::Node {
       {-inverse_sqrt_two, -inverse_sqrt_two, 0.0},
     }};
     for (std::size_t i = 0; i < result.servo.size(); ++i) {
-      // Sum(t_i t_i^T) = 2I, hence one half of each tangent projection.
+      // For this X layout, Sum(t_i t_i^T) = 2I. Half of each tangent
+      // projection distributes horizontal force without a matrix inverse.
       const double horizontal = 0.5 * (
         body_force[0] * tangent[i][0] + body_force[1] * tangent[i][1]);
       result.servo[i] = std::clamp(
@@ -253,6 +275,8 @@ class PalletroneFlightController final : public rclcpp::Node {
       reference_->base_twist.angular.x, reference_->base_twist.angular.y,
       reference_->base_twist.angular.z};
     const Vec3 attitude_error = orientation_error(current, desired);
+    // The suspended arm produces a constant gravity moment. A bounded
+    // integrator removes the steady tilt without allowing unlimited windup.
     for (std::size_t i = 0; i < attitude_integral_.size(); ++i) {
       attitude_integral_[i] = std::clamp(
         attitude_integral_[i] + attitude_error[i] / control_hz_,

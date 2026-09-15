@@ -1,3 +1,10 @@
+"""
+Canonical MJCF names used by the simulator boundary.
+
+Keeping them in one module makes an XML rename fail fast during plant startup
+instead of silently disconnecting a controller from an actuator.
+"""
+
 BASE_JOINT = 'base_free'
 TCP_SITE = 'tcp'
 TARGET_MARKER_BODY = 'desired_tcp_marker'

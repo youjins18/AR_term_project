@@ -31,4 +31,11 @@ install(FILES README.md DESTINATION share/${PROJECT_NAME})
 ament_export_include_directories(include)
 ament_export_libraries(chr_dynamics)
 ament_export_dependencies(Eigen3)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_chr_kinematics test/test_chr_kinematics.cpp)
+  target_link_libraries(test_chr_kinematics chr_dynamics Eigen3::Eigen)
+endif()
+
 ament_package()

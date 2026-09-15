@@ -1,3 +1,9 @@
+// Copyright 2026 mrl_nuc
+// SPDX-License-Identifier: Apache-2.0
+
+#include <Eigen/Geometry>
+
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -8,11 +14,8 @@
 #include <string>
 #include <vector>
 
-#include <Eigen/Geometry>
-
 #include "chr_controller/chr_dynamics_library.hpp"
 #include "chr_msgs/msg/chr_reference.hpp"
-#include "chr_msgs/msg/chr_state.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -32,17 +35,19 @@ class ChrController final : public rclcpp::Node {
       "dls_orientation_weight_m_per_rad", 0.25);
     ik_options_.base_translation_scale = declare_parameter(
       "dls_base_translation_scale", 0.35);
-    ik_options_.base_rotation_scale = declare_parameter(
-      "dls_base_rotation_scale", 0.5);
-    if (ik_options_.orientation_tolerance_rad <= 0.0 ||
+    ik_options_.base_yaw_scale = declare_parameter("dls_base_yaw_scale", 0.5);
+    ik_options_.maximum_step_rad = declare_parameter("dls_maximum_step_rad", 0.12);
+    const int maximum_iterations = declare_parameter("dls_maximum_iterations", 100);
+    if (command_hz_ <= 0.0 || ik_options_.damping <= 0.0 ||
+        ik_options_.tolerance_m <= 0.0 ||
+        ik_options_.orientation_tolerance_rad <= 0.0 ||
         ik_options_.orientation_weight_m_per_rad <= 0.0 ||
         ik_options_.base_translation_scale <= 0.0 ||
-        ik_options_.base_rotation_scale <= 0.0) {
-      throw std::runtime_error("DLS pose tolerances, weights and coordinate scales must be positive");
+        ik_options_.base_yaw_scale <= 0.0 || ik_options_.maximum_step_rad <= 0.0 ||
+        maximum_iterations <= 0) {
+      throw std::runtime_error("controller rates and DLS parameters must be positive");
     }
-    ik_options_.maximum_step_rad = declare_parameter("dls_maximum_step_rad", 0.12);
-    ik_options_.maximum_iterations = static_cast<std::size_t>(
-      declare_parameter("dls_maximum_iterations", 100));
+    ik_options_.maximum_iterations = static_cast<std::size_t>(maximum_iterations);
 
     const std::set<std::string> supported{"hold", "dls_ik", "external"};
     if (!supported.count(planner_mode_)) {
@@ -52,14 +57,13 @@ class ChrController final : public rclcpp::Node {
     }
 
     desired_base_position_ = Eigen::Vector3d(base_position[0], base_position[1], base_position[2]);
-    desired_base_orientation_ = rpy_to_quaternion(base_rpy[0], base_rpy[1], base_rpy[2]);
+    if (std::abs(base_rpy[0]) > 1e-12 || std::abs(base_rpy[1]) > 1e-12) {
+      RCLCPP_WARN(get_logger(), "default base roll/pitch are ignored; CHR commands remain level");
+    }
+    desired_base_orientation_ = yaw_orientation(base_rpy[2]);
     desired_joint_position_ = chr_controller::ChrKinematics::clamp_joints(
       Eigen::Vector3d(joints[0], joints[1], joints[2]));
 
-    state_subscriber_ = create_subscription<chr_msgs::msg::ChrState>(
-      "/chr/state", 1, [this](const chr_msgs::msg::ChrState::SharedPtr message) {
-        state_ = message;
-      });
     tcp_target_subscriber_ = create_subscription<geometry_msgs::msg::PoseStamped>(
       "/chr/target/tcp_pose", 1,
       std::bind(&ChrController::receive_tcp_target, this, std::placeholders::_1));
@@ -72,7 +76,8 @@ class ChrController final : public rclcpp::Node {
       std::chrono::duration<double>(1.0 / command_hz_),
       std::bind(&ChrController::publish_reference, this));
     RCLCPP_INFO(
-      get_logger(), "planner_mode=%s; output=[base pose(6), J1, J2, J3]",
+      get_logger(),
+      "planner_mode=%s; output=[x_b, y_b, z_b, yaw_b, J1, J2, J3], roll_b=pitch_b=0",
       planner_mode_.c_str());
   }
 
@@ -84,13 +89,20 @@ class ChrController final : public rclcpp::Node {
     if (values.size() != 3) {
       throw std::runtime_error(name + " must contain exactly three values");
     }
+    if (!std::all_of(values.begin(), values.end(), [](double value) {
+        return std::isfinite(value);
+      })) {
+      throw std::runtime_error(name + " must contain only finite values");
+    }
     return {values[0], values[1], values[2]};
   }
 
-  static Eigen::Quaterniond rpy_to_quaternion(double roll, double pitch, double yaw) {
-    return Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
-      Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
-      Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
+  static Eigen::Quaterniond yaw_orientation(double yaw) {
+    return Eigen::Quaterniond(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+  }
+
+  static bool finite(const Eigen::Vector3d &value) {
+    return value.array().isFinite().all();
   }
 
   void receive_tcp_target(const geometry_msgs::msg::PoseStamped::SharedPtr target) {
@@ -102,22 +114,23 @@ class ChrController final : public rclcpp::Node {
     Eigen::Quaterniond target_orientation(
       target->pose.orientation.w, target->pose.orientation.x,
       target->pose.orientation.y, target->pose.orientation.z);
-    if (target_orientation.norm() < 1e-9) {
-      RCLCPP_ERROR(get_logger(), "TCP target quaternion has zero norm; target rejected");
+    const Eigen::Vector3d target_position(
+      target->pose.position.x, target->pose.position.y, target->pose.position.z);
+    if (!finite(target_position) || !target_orientation.coeffs().array().isFinite().all() ||
+        target_orientation.norm() < 1e-9) {
+      RCLCPP_ERROR(get_logger(), "TCP target contains a non-finite position or invalid quaternion");
       return;
     }
     Eigen::Isometry3d target_pose = Eigen::Isometry3d::Identity();
-    target_pose.translate(Eigen::Vector3d(
-      target->pose.position.x, target->pose.position.y, target->pose.position.z));
+    target_pose.translate(target_position);
     target_pose.rotate(target_orientation.normalized());
     const auto result = chr_controller::ChrKinematics::solve_pose_dls(
       desired_base_position_, desired_base_orientation_, target_pose,
       desired_joint_position_, ik_options_);
     desired_base_position_ = result.base_position;
-    desired_base_orientation_ = result.base_orientation;
+    desired_base_orientation_ = chr_controller::ChrKinematics::level_yaw_orientation(
+      result.base_orientation);
     desired_joint_position_ = result.joint_position;
-    last_ik_residual_m_ = result.position_residual_m;
-    last_ik_orientation_residual_rad_ = result.orientation_residual_rad;
     if (result.converged) {
       RCLCPP_INFO(
         get_logger(),
@@ -126,29 +139,58 @@ class ChrController final : public rclcpp::Node {
     } else {
       RCLCPP_WARN(
         get_logger(),
-        "pose DLS-IK target is unreachable or singular; bounded best effort: position=%.4f m, attitude=%.3f rad",
+        "pose DLS-IK target is unreachable or singular; bounded best effort: "
+        "position=%.4f m, attitude=%.3f rad",
         result.position_residual_m, result.orientation_residual_rad);
     }
   }
 
   void receive_external_target(const chr_msgs::msg::ChrReference::SharedPtr target) {
     if (planner_mode_ != "external") return;
-    desired_base_position_ = Eigen::Vector3d(
+    const Eigen::Vector3d base_position(
       target->base_pose.position.x, target->base_pose.position.y, target->base_pose.position.z);
-    desired_base_orientation_ = Eigen::Quaterniond(
+    const Eigen::Quaterniond base_orientation(
       target->base_pose.orientation.w, target->base_pose.orientation.x,
-      target->base_pose.orientation.y, target->base_pose.orientation.z).normalized();
-    desired_base_linear_velocity_ = Eigen::Vector3d(
+      target->base_pose.orientation.y, target->base_pose.orientation.z);
+    const Eigen::Vector3d base_linear_velocity(
       target->base_twist.linear.x, target->base_twist.linear.y, target->base_twist.linear.z);
-    desired_base_angular_velocity_ = Eigen::Vector3d(
-      target->base_twist.angular.x, target->base_twist.angular.y, target->base_twist.angular.z);
-    desired_joint_position_ = chr_controller::ChrKinematics::clamp_joints(Eigen::Vector3d(
-      target->joint_position[0], target->joint_position[1], target->joint_position[2]));
-    desired_joint_velocity_ = Eigen::Vector3d(
+    const Eigen::Vector3d joint_position(
+      target->joint_position[0], target->joint_position[1], target->joint_position[2]);
+    const Eigen::Vector3d joint_velocity(
       target->joint_velocity[0], target->joint_velocity[1], target->joint_velocity[2]);
+    if (!finite(base_position) || !finite(base_linear_velocity) || !finite(joint_position) ||
+        !finite(joint_velocity) || !base_orientation.coeffs().array().isFinite().all() ||
+        base_orientation.norm() < 1e-9 || !std::isfinite(target->base_twist.angular.z)) {
+      RCLCPP_ERROR(get_logger(), "external target contains non-finite values; target rejected");
+      return;
+    }
+
+    const auto normalized_orientation = base_orientation.normalized();
+    const auto level_orientation = chr_controller::ChrKinematics::level_yaw_orientation(
+      normalized_orientation);
+    const double removed_tilt = Eigen::AngleAxisd(
+      level_orientation.conjugate() * normalized_orientation).angle();
+    if (removed_tilt > 1e-6 || std::abs(target->base_twist.angular.x) > 1e-9 ||
+        std::abs(target->base_twist.angular.y) > 1e-9) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 2000,
+        "external base roll/pitch and x/y angular velocity were projected to zero");
+    }
+    desired_base_position_ = base_position;
+    desired_base_orientation_ = level_orientation;
+    desired_base_linear_velocity_ = base_linear_velocity;
+    desired_base_angular_velocity_ = Eigen::Vector3d(
+      0.0, 0.0, target->base_twist.angular.z);
+    desired_joint_position_ = chr_controller::ChrKinematics::clamp_joints(joint_position);
+    desired_joint_velocity_ = joint_velocity;
   }
 
   void publish_reference() {
+    // This final projection is a safety invariant shared by every planner mode.
+    desired_base_orientation_ = chr_controller::ChrKinematics::level_yaw_orientation(
+      desired_base_orientation_);
+    desired_base_angular_velocity_.x() = 0.0;
+    desired_base_angular_velocity_.y() = 0.0;
     chr_msgs::msg::ChrReference reference;
     reference.header.stamp = now();
     reference.header.frame_id = "world";
@@ -175,8 +217,6 @@ class ChrController final : public rclcpp::Node {
 
   std::string planner_mode_;
   double command_hz_{100.0};
-  double last_ik_residual_m_{0.0};
-  double last_ik_orientation_residual_rad_{0.0};
   chr_controller::IkOptions ik_options_;
   Eigen::Vector3d desired_base_position_{0.0, 0.0, 1.2};
   Eigen::Quaterniond desired_base_orientation_{1.0, 0.0, 0.0, 0.0};
@@ -184,8 +224,6 @@ class ChrController final : public rclcpp::Node {
   Eigen::Vector3d desired_base_angular_velocity_{Eigen::Vector3d::Zero()};
   chr_controller::JointVector desired_joint_position_{chr_controller::JointVector::Zero()};
   chr_controller::JointVector desired_joint_velocity_{chr_controller::JointVector::Zero()};
-  chr_msgs::msg::ChrState::SharedPtr state_;
-  rclcpp::Subscription<chr_msgs::msg::ChrState>::SharedPtr state_subscriber_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr tcp_target_subscriber_;
   rclcpp::Subscription<chr_msgs::msg::ChrReference>::SharedPtr external_target_subscriber_;
   rclcpp::Publisher<chr_msgs::msg::ChrReference>::SharedPtr reference_publisher_;

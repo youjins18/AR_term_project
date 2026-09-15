@@ -1,4 +1,4 @@
-# Cone Harvest Robot (CHR) simulation workspace
+# 🌲 Cone Harvest Robot (CHR) Simulation
 
 CHR is the Palletrone plus the cone-harvesting arm mounted below its airframe. This
 workspace is a minimal but extensible ROS 2 Humble and MuJoCo control skeleton.
@@ -10,7 +10,7 @@ workspace is a minimal but extensible ROS 2 Humble and MuJoCo control skeleton.
 | `chr_description` | composed MuJoCo model and original arm meshes |
 | `chr_msgs` | stable state, reference and actuator contracts |
 | `chr_mujoco` | physics stepping and the only plant input boundary |
-| `chr_controller` | high-level 9-coordinate planning, FK/Jacobian/DLS-IK |
+| `chr_controller` | constrained whole-body planning, FK/Jacobian/DLS-IK |
 | `palletrone_flight_controller` | base-pose PID, attitude PD, DOB and allocation |
 | `arm_controller` | bounded J1--J3 pass-through position command |
 | `chr_commander` | interactive TCP position and attitude keyboard commands |
@@ -31,8 +31,9 @@ The data flow is deliberately one-way:
 ```
 
 `ChrReference` is the authoritative high-level output. It contains base position,
-base quaternion, base twist and J1--J3; conceptually this is
-`[x_b,y_b,z_b,roll_b,pitch_b,yaw_b,J1,J2,J3]`.
+base quaternion, base twist and J1--J3. Palletrone roll and pitch commands are
+always zero, so the independent coordinates are
+`[x_b,y_b,z_b,yaw_b,J1,J2,J3]`.
 
 ## Build
 
@@ -92,7 +93,7 @@ normalizes the quaternion and clamps arm joint limits before republishing.
   for the physical attachment transform.
 - RL should publish through the `external` target contract. Do not let a policy
   write MuJoCo actuators directly; keep limits and low-level control in place.
-- The pose DLS solver owns the complete 9-coordinate command and uses a weighted
-  6x9 Jacobian. Tune its coordinate scales before aggressive flight motion.
+- The pose DLS solver owns all seven independent coordinates and uses a weighted
+  6x7 Jacobian. Tune its coordinate scales before aggressive flight motion.
 - `third_party/dynamics_gen_chr.py` is a reduced-order reference only. Identify
   coupled inertial parameters before enabling model-based feedforward or NMPC.

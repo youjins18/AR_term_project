@@ -1,5 +1,10 @@
+// Copyright 2026 mrl_nuc
+// SPDX-License-Identifier: Apache-2.0
+
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -21,6 +26,14 @@ class ArmController final : public rclcpp::Node {
     kp_ = vector_parameter("joint_kp", {20.0, 20.0, 16.0});
     kd_ = vector_parameter("joint_kd", {1.2, 1.2, 1.0});
     desired_position_ = vector_parameter("default_joint_position", {0.0, 0.0, 0.0});
+    if (control_hz_ <= 0.0 || reference_timeout_s_ <= 0.0) {
+      throw std::runtime_error("control_hz and reference_timeout_s must be positive");
+    }
+    for (std::size_t index = 0; index < kp_.size(); ++index) {
+      if (kp_[index] < 0.0 || kd_[index] < 0.0) {
+        throw std::runtime_error("joint_kp and joint_kd must be non-negative");
+      }
+    }
 
     state_subscriber_ = create_subscription<chr_msgs::msg::ChrState>(
       "/chr/state", 1, [this](const chr_msgs::msg::ChrState::SharedPtr message) {
@@ -48,6 +61,11 @@ class ArmController final : public rclcpp::Node {
     if (values.size() != 3) {
       throw std::runtime_error(name + " must contain exactly three values");
     }
+    if (!std::all_of(values.begin(), values.end(), [](double value) {
+        return std::isfinite(value);
+      })) {
+      throw std::runtime_error(name + " must contain only finite values");
+    }
     return {values[0], values[1], values[2]};
   }
 
@@ -56,6 +74,7 @@ class ArmController final : public rclcpp::Node {
     const bool stale = !have_reference_ ||
       (now() - last_reference_time_).seconds() > reference_timeout_s_;
     if (stale) {
+      // Freezing the measured pose is safer than replaying an expired planner target.
       desired_position_ = state_->joint_position;
       desired_velocity_ = {};
       RCLCPP_WARN_THROTTLE(

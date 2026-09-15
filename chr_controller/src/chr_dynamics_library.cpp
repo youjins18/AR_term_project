@@ -1,10 +1,25 @@
+// Copyright 2026 mrl_nuc
+// SPDX-License-Identifier: Apache-2.0
+
 #include "chr_controller/chr_dynamics_library.hpp"
+
+#include <Eigen/Cholesky>
 
 #include <algorithm>
 #include <cmath>
 
 namespace chr_controller {
 namespace {
+constexpr double kFiniteDifferenceStep = 1e-6;
+constexpr Eigen::Index kTaskDimension = 6;
+constexpr Eigen::Index kCoordinateCount = 7;
+constexpr Eigen::Index kBaseYawIndex = 3;
+constexpr Eigen::Index kArmCoordinateOffset = 4;
+
+using TaskVector = Eigen::Matrix<double, kTaskDimension, 1>;
+using CoordinateVector = Eigen::Matrix<double, kCoordinateCount, 1>;
+using TaskJacobian = Eigen::Matrix<double, kTaskDimension, kCoordinateCount>;
+
 Eigen::Isometry3d fixed_transform(
     const Eigen::Vector3d &translation, const Eigen::Quaterniond &quaternion) {
   Eigen::Isometry3d transform = Eigen::Isometry3d::Identity();
@@ -27,10 +42,15 @@ Eigen::Vector3d rotation_vector(const Eigen::Matrix3d &rotation) {
   return angle_axis.axis() * angle_axis.angle();
 }
 
-Eigen::Quaterniond rotation_increment(const Eigen::Vector3d &rotation_vector_value) {
-  const double angle = rotation_vector_value.norm();
-  if (angle < 1e-12) return Eigen::Quaterniond::Identity();
-  return Eigen::Quaterniond(Eigen::AngleAxisd(angle, rotation_vector_value / angle));
+double quaternion_yaw(const Eigen::Quaterniond &input) {
+  const auto quaternion = input.normalized();
+  return std::atan2(
+    2.0 * (quaternion.w() * quaternion.z() + quaternion.x() * quaternion.y()),
+    1.0 - 2.0 * (quaternion.y() * quaternion.y() + quaternion.z() * quaternion.z()));
+}
+
+Eigen::Quaterniond yaw_orientation(double yaw) {
+  return Eigen::Quaterniond(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
 }
 }  // namespace
 
@@ -38,6 +58,11 @@ JointVector ChrKinematics::clamp_joints(const JointVector &joint_position) {
   const JointVector lower(0.0, -1.5708, -1.5708);
   const JointVector upper(1.5708, 1.5708, 1.5708);
   return joint_position.cwiseMax(lower).cwiseMin(upper);
+}
+
+Eigen::Quaterniond ChrKinematics::level_yaw_orientation(
+    const Eigen::Quaterniond &orientation) {
+  return yaw_orientation(quaternion_yaw(orientation));
 }
 
 Eigen::Isometry3d ChrKinematics::base_pose(
@@ -74,16 +99,16 @@ Eigen::Isometry3d ChrKinematics::tcp_in_world(
 
 Eigen::Matrix3d ChrKinematics::position_jacobian(
     const Eigen::Isometry3d &world_from_base, const JointVector &joint_position) {
-  constexpr double epsilon = 1e-6;
   Eigen::Matrix3d jacobian;
   for (Eigen::Index column = 0; column < 3; ++column) {
     JointVector positive = joint_position;
     JointVector negative = joint_position;
-    positive[column] += epsilon;
-    negative[column] -= epsilon;
+    positive[column] += kFiniteDifferenceStep;
+    negative[column] -= kFiniteDifferenceStep;
     jacobian.col(column) =
       (tcp_in_world(world_from_base, positive).translation() -
-       tcp_in_world(world_from_base, negative).translation()) / (2.0 * epsilon);
+       tcp_in_world(world_from_base, negative).translation()) /
+      (2.0 * kFiniteDifferenceStep);
   }
   return jacobian;
 }
@@ -127,7 +152,8 @@ PoseIkResult ChrKinematics::solve_pose_dls(
     const IkOptions &options) {
   PoseIkResult result;
   result.base_position = base_position;
-  result.base_orientation = seed_base_orientation.normalized();
+  double base_yaw = quaternion_yaw(seed_base_orientation);
+  result.base_orientation = yaw_orientation(base_yaw);
   result.joint_position = clamp_joints(seed_joint_position);
   const double damping_squared = options.damping * options.damping;
   const double orientation_weight = std::max(options.orientation_weight_m_per_rad, 1e-6);
@@ -147,57 +173,56 @@ PoseIkResult ChrKinematics::solve_pose_dls(
       return result;
     }
 
-    constexpr double epsilon = 1e-6;
-    Eigen::Matrix<double, 6, 9> jacobian;
-    for (Eigen::Index column = 0; column < 9; ++column) {
+    TaskJacobian jacobian;
+    for (Eigen::Index column = 0; column < kCoordinateCount; ++column) {
       Eigen::Vector3d positive_position = result.base_position;
       Eigen::Vector3d negative_position = result.base_position;
-      Eigen::Quaterniond positive_orientation = result.base_orientation;
-      Eigen::Quaterniond negative_orientation = result.base_orientation;
+      double positive_yaw = base_yaw;
+      double negative_yaw = base_yaw;
       JointVector positive_joints = result.joint_position;
       JointVector negative_joints = result.joint_position;
       if (column < 3) {
-        positive_position[column] += epsilon;
-        negative_position[column] -= epsilon;
-      } else if (column < 6) {
-        Eigen::Vector3d perturbation = Eigen::Vector3d::Zero();
-        perturbation[column - 3] = epsilon;
-        positive_orientation = (rotation_increment(perturbation) * positive_orientation).normalized();
-        negative_orientation = (rotation_increment(-perturbation) * negative_orientation).normalized();
+        positive_position[column] += kFiniteDifferenceStep;
+        negative_position[column] -= kFiniteDifferenceStep;
+      } else if (column == kBaseYawIndex) {
+        positive_yaw += kFiniteDifferenceStep;
+        negative_yaw -= kFiniteDifferenceStep;
       } else {
-        positive_joints[column - 6] += epsilon;
-        negative_joints[column - 6] -= epsilon;
+        positive_joints[column - kArmCoordinateOffset] += kFiniteDifferenceStep;
+        negative_joints[column - kArmCoordinateOffset] -= kFiniteDifferenceStep;
       }
       const auto positive_pose = tcp_in_world(
-        base_pose(positive_position, positive_orientation), positive_joints);
+        base_pose(positive_position, yaw_orientation(positive_yaw)), positive_joints);
       const auto negative_pose = tcp_in_world(
-        base_pose(negative_position, negative_orientation), negative_joints);
+        base_pose(negative_position, yaw_orientation(negative_yaw)), negative_joints);
       jacobian.block<3, 1>(0, column) =
-        (positive_pose.translation() - negative_pose.translation()) / (2.0 * epsilon);
+        (positive_pose.translation() - negative_pose.translation()) /
+        (2.0 * kFiniteDifferenceStep);
       jacobian.block<3, 1>(3, column) = orientation_weight * rotation_vector(
-        positive_pose.rotation() * negative_pose.rotation().transpose()) / (2.0 * epsilon);
+        positive_pose.rotation() * negative_pose.rotation().transpose()) /
+        (2.0 * kFiniteDifferenceStep);
     }
 
-    Eigen::Matrix<double, 6, 1> error;
+    TaskVector error;
     error.head<3>() = position_error;
     error.tail<3>() = orientation_weight * orientation_error;
-    Eigen::Matrix<double, 9, 1> coordinate_scale;
+    CoordinateVector coordinate_scale;
     coordinate_scale <<
       options.base_translation_scale, options.base_translation_scale,
-      options.base_translation_scale, options.base_rotation_scale,
-      options.base_rotation_scale, options.base_rotation_scale, 1.0, 1.0, 1.0;
-    const Eigen::Matrix<double, 6, 9> weighted_jacobian =
+      options.base_translation_scale, options.base_yaw_scale, 1.0, 1.0, 1.0;
+    const TaskJacobian weighted_jacobian =
       jacobian * coordinate_scale.asDiagonal();
-    Eigen::Matrix<double, 9, 1> step = coordinate_scale.asDiagonal() *
+    CoordinateVector step = coordinate_scale.asDiagonal() *
       weighted_jacobian.transpose() *
       (weighted_jacobian * weighted_jacobian.transpose() +
-       damping_squared * Eigen::Matrix<double, 6, 6>::Identity()).ldlt().solve(error);
+       damping_squared * Eigen::Matrix<double, kTaskDimension, kTaskDimension>::Identity())
+      .ldlt().solve(error);
     if (step.norm() > options.maximum_step_rad) {
       step *= options.maximum_step_rad / step.norm();
     }
     result.base_position += step.head<3>();
-    result.base_orientation = (
-      rotation_increment(step.segment<3>(3)) * result.base_orientation).normalized();
+    base_yaw += step[kBaseYawIndex];
+    result.base_orientation = yaw_orientation(base_yaw);
     result.joint_position = clamp_joints(result.joint_position + step.tail<3>());
   }
 

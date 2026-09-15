@@ -4,5 +4,5 @@ chr_keyboard_commander:
     translation_step_m: 0.01
     rotation_step_deg: 3.0
     poll_hz: 50.0
-    workspace_min: [-1.5, -1.5, 0.05]
-    workspace_max: [1.5, 1.5, 2.5]
+    workspace_min: [-10.0, -10.0, -20.0]
+    workspace_max: [10.0, 10.0, 20.0]

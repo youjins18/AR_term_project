@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate a reduced-order symbolic arm dynamics reference.
+"""
+Generate a reduced-order symbolic arm dynamics reference.
 
 This generator is deliberately offline and is not part of the default build. It
 produces symbolic M(q), C(q,dq) and g(q) for a nominal planar 3R approximation.

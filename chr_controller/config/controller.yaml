@@ -10,6 +10,6 @@ chr_controller:
     dls_orientation_tolerance_rad: 0.01
     dls_orientation_weight_m_per_rad: 0.25
     dls_base_translation_scale: 0.35
-    dls_base_rotation_scale: 0.5
+    dls_base_yaw_scale: 0.5
     dls_maximum_step_rad: 0.12
     dls_maximum_iterations: 100

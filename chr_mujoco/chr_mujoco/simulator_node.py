@@ -1,3 +1,5 @@
+"""ROS 2 node that owns and advances the single MuJoCo plant instance."""
+
 from __future__ import annotations
 
 import os
@@ -25,6 +27,10 @@ class SimulatorNode(Node):
         timeout_s = self.declare_parameter('command_timeout_s', 0.2).value
         initial_base = self.declare_parameter('initial_base_position', [0.0, 0.0, 1.2]).value
         initial_joints = self.declare_parameter('initial_joint_position', [0.0, 0.0, 0.0]).value
+        if physics_hz <= 0.0 or publish_hz <= 0.0 or realtime_factor <= 0.0:
+            raise ValueError('physics_hz, publish_hz and realtime_factor must be positive')
+        if publish_hz > physics_hz:
+            raise ValueError('publish_hz cannot exceed physics_hz')
 
         model_path = os.path.join(
             get_package_share_directory('chr_description'), 'mujoco', 'scene.xml')
@@ -45,7 +51,7 @@ class SimulatorNode(Node):
             except Exception as error:  # Rendering is optional in headless operation.
                 self.get_logger().warning(f'viewer disabled: {error}')
 
-        wall_hz = physics_hz * max(float(realtime_factor), 1e-6)
+        wall_hz = physics_hz * float(realtime_factor)
         self._timer = self.create_timer(1.0 / wall_hz, self._step)
         self.get_logger().info(
             f'CHR model loaded: nq={self._plant.model.nq}, nv={self._plant.model.nv}, '
@@ -54,7 +60,10 @@ class SimulatorNode(Node):
     def _on_target_pose(self, message: PoseStamped) -> None:
         p = message.pose.position
         q = message.pose.orientation
-        self._plant.set_target_marker((p.x, p.y, p.z), (q.w, q.x, q.y, q.z))
+        try:
+            self._plant.set_target_marker((p.x, p.y, p.z), (q.w, q.x, q.y, q.z))
+        except ValueError as error:
+            self.get_logger().warning(f'rejected target marker pose: {error}')
 
     def _step(self) -> None:
         self._actuators.enforce_watchdogs()
@@ -72,7 +81,7 @@ class SimulatorNode(Node):
         self._state_pub.publish(make_chr_state(snapshot, stamp))
         self._joint_pub.publish(make_joint_state(snapshot, stamp))
 
-    def destroy_node(self):
+    def destroy_node(self) -> None:
         if self._viewer is not None:
             self._viewer.close()
         return super().destroy_node()

@@ -1,3 +1,5 @@
+"""Packaging metadata for the CHR MuJoCo ROS node."""
+
 from setuptools import find_packages, setup
 
 package_name = 'chr_mujoco'
