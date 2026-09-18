@@ -52,7 +52,7 @@ class ActuatorInterface:
         if self._is_stale(now, self._last_flight):
             self._plant.stop_flight()
         if self._is_stale(now, self._last_arm):
-            self._plant.hold_arm()
+            self._plant.stop_arm()
 
     def _is_stale(self, now, last_command) -> bool:
         """Return true until the first command and after the configured deadline."""

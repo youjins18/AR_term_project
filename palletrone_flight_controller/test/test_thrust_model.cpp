@@ -1,6 +1,3 @@
-// Copyright 2026 mrl_nuc
-// SPDX-License-Identifier: Apache-2.0
-
 #include "palletrone_flight_controller/thrust_model.hpp"
 
 #include "gtest/gtest.h"

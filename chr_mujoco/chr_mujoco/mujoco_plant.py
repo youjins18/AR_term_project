@@ -15,13 +15,11 @@ from .model_names import (
     ROTOR_TILT_JOINTS,
     SENSORS,
     TARGET_MARKER_BODY,
-    TCP_SITE,
 )
 
 
 @dataclass(frozen=True)
 class PlantSnapshot:
-    time: float
     base_position: np.ndarray
     base_quaternion: np.ndarray
     base_linear_velocity: np.ndarray
@@ -67,7 +65,6 @@ class MuJoCoPlant:
             name: self._id(mujoco.mjtObj.mjOBJ_SENSOR, name)
             for group in SENSORS.values() for name in group
         }
-        self._tcp_id = self._id(mujoco.mjtObj.mjOBJ_SITE, TCP_SITE)
         marker_id = self._id(mujoco.mjtObj.mjOBJ_BODY, TARGET_MARKER_BODY)
         self._marker_mocap_id = int(self.model.body_mocapid[marker_id])
         self._joint_qpos_addresses = np.asarray(
@@ -153,7 +150,7 @@ class MuJoCoPlant:
     def stop_flight(self) -> None:
         self._clip_and_set(ACTUATORS['rotors'], np.zeros(len(ACTUATORS['rotors'])))
 
-    def hold_arm(self) -> None:
+    def stop_arm(self) -> None:
         self._clip_and_set(ACTUATORS['arm'], np.zeros(len(ACTUATORS['arm'])))
 
     def set_target_marker(
@@ -181,8 +178,7 @@ class MuJoCoPlant:
             self._mass_matrix @ self.data.qacc + self.data.qfrc_bias
         )[self._joint_qvel_addresses].copy()
 
-        # qfrc_bias with zero velocity is the gravity term. Use separate data so
-        # this diagnostic calculation cannot perturb the simulated plant.
+        # Evaluate gravity on separate data so logging cannot alter the plant.
         self._gravity_data.qpos[:] = self.data.qpos
         self._gravity_data.qvel[:] = 0.0
         self._gravity_data.qacc[:] = 0.0
@@ -190,7 +186,6 @@ class MuJoCoPlant:
         torque_grav = self._gravity_data.qfrc_bias[
             self._joint_qvel_addresses].copy()
         return PlantSnapshot(
-            time=float(self.data.time),
             base_position=self.data.qpos[base_qpos:base_qpos + 3].copy(),
             base_quaternion=self.data.qpos[base_qpos + 3:base_qpos + 7].copy(),
             base_linear_velocity=self.data.qvel[base_qvel:base_qvel + 3].copy(),

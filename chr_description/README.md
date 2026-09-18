@@ -10,7 +10,7 @@ three-command-coordinate harvesting arm rigidly attached to its underside.
 - `palletrone.xml`: free base, four diagonal tilt joints, rotor sites, CAD visuals
   and lightweight primitive collision geometry.
 - `arm.xml`: original cone harvester CAD, inertial data and joints J1--J3. The
-  original fourth wrist joint is intentionally fixed because the requested CHR
+  original fourth wrist joint is fixed because the CHR
   command vector contains three arm coordinates.
 
 The Palletrone `BODY.stl` and `PROP.stl` meshes retain the original TPAM metre

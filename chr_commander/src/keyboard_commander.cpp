@@ -1,6 +1,3 @@
-// Copyright 2026 mrl_nuc
-// SPDX-License-Identifier: Apache-2.0
-
 #include <termios.h>
 #include <unistd.h>
 
@@ -137,8 +134,7 @@ class KeyboardCommander final : public rclcpp::Node {
       throw std::runtime_error("failed to read terminal settings");
     }
     termios raw = original_terminal_;
-    // Keep ISIG enabled so Ctrl-C remains available; only canonical buffering
-    // and local echo are disabled for one-key commands.
+    // Keep Ctrl-C enabled while reading one key at a time.
     raw.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 0;

@@ -1,6 +1,6 @@
 # arm_controller
 
-This node is intentionally a pass-through boundary. It selects J1--J3 from the
+This node selects J1--J3 from the
 whole-body `/chr/reference`, clamps them to the model limits, attaches
 position-loop gains, and publishes `/chr/actuator/arm`.
 

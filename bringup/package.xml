@@ -3,8 +3,8 @@
   <name>bringup</name>
   <version>0.1.0</version>
   <description>Launch composition for the cone harvest robot.</description>
-  <maintainer email="mrl_nuc@example.com">mrl_nuc</maintainer>
-  <license>Apache-2.0</license>
+  <maintainer email="chldbwls08@seoultech.ac.kr">youjins18</maintainer>
+  <license>TODO</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <exec_depend>arm_controller</exec_depend>
   <exec_depend>chr_commander</exec_depend>

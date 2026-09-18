@@ -2,9 +2,9 @@
 <package format="3">
   <name>chr_mujoco</name>
   <version>0.1.0</version>
-  <description>Thin MuJoCo plant and ROS 2 boundary for CHR.</description>
-  <maintainer email="mrl_nuc@example.com">mrl_nuc</maintainer>
-  <license>Apache-2.0</license>
+  <description>MuJoCo plant and ROS 2 interface for CHR.</description>
+  <maintainer email="chldbwls08@seoultech.ac.kr">youjins18</maintainer>
+  <license>TODO</license>
   <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>chr_description</exec_depend>

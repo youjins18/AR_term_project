@@ -1,7 +1,7 @@
 # chr_controller
 
-This is the high-level motion-planning boundary and the only component that owns
-the complete desired coordinate vector. The message retains all base pose fields,
+This node owns the complete desired coordinate vector. The message retains all
+base pose fields,
 but roll and pitch are constrained to zero, leaving seven independent coordinates:
 
 `[x_b, y_b, z_b, yaw_b, J1, J2, J3]`, with `roll_b = pitch_b = 0`.
@@ -20,15 +20,13 @@ so both low-level controllers share one timestamp and source.
   insertion point for RL, NMPC or an offline motion planner. Base roll/pitch and
   x/y angular-velocity inputs are projected to zero before publication.
 
-An unimplemented mode fails explicitly. RL should be introduced as a separate
-policy adapter publishing `ChrReference` to the external input, keeping inference,
-safety projection and low-level control independently testable.
+Unknown modes are rejected during startup. An RL policy can use the `external`
+input without bypassing the controller constraints or the low-level controllers.
 
 `/chr/diagnostics/ik` publishes the latest DLS target status, convergence flag,
 iteration count, position/orientation residual, damping, minimum singular value
 and condition number for MATLAB analysis.
 
-`libchr_dynamics.so` contains the exact nominal MJCF kinematic frame chain,
-numerical position and pose Jacobians, joint limits, position DLS and weighted
-whole-body pose DLS. Dynamic model generation lives under `third_party` and is
-intentionally not trusted for control until system identification is available.
+`src/chr_dynamics_library.cpp` implements the CHR kinematics, joint-limit
+handling and weighted pose DLS-IK. Despite the filename, it does not implement a
+whole-body dynamics model.

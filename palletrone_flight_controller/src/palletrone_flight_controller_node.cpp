@@ -1,6 +1,3 @@
-// Copyright 2026 mrl_nuc
-// SPDX-License-Identifier: Apache-2.0
-
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -181,8 +178,7 @@ class PalletroneFlightController final : public rclcpp::Node {
       body_force[2] / 4.0, body_force[2] / 4.0};
     bool saturated = false;
 
-    // Apply each torque component sequentially and preserve its direction if a
-    // rotor reaches a limit; this avoids clipping individual motors afterward.
+    // Scale each torque component as a group when a rotor reaches its limit.
     const auto apply_delta = [&](const Vec4 &delta) {
       double factor = 1.0;
       for (std::size_t i = 0; i < vertical.size(); ++i) {
@@ -215,8 +211,7 @@ class PalletroneFlightController final : public rclcpp::Node {
       {-inverse_sqrt_two, -inverse_sqrt_two, 0.0},
     }};
     for (std::size_t i = 0; i < result.servo.size(); ++i) {
-      // For this X layout, Sum(t_i t_i^T) = 2I. Half of each tangent
-      // projection distributes horizontal force without a matrix inverse.
+      // For this X layout, Sum(t_i t_i^T) = 2I.
       const double horizontal = 0.5 * (
         body_force[0] * tangent[i][0] + body_force[1] * tangent[i][1]);
       result.servo[i] = std::clamp(

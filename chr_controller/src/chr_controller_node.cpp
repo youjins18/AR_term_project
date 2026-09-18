@@ -1,6 +1,3 @@
-// Copyright 2026 mrl_nuc
-// SPDX-License-Identifier: Apache-2.0
-
 #include <Eigen/Geometry>
 
 #include <algorithm>
@@ -9,7 +6,6 @@
 #include <cmath>
 #include <functional>
 #include <memory>
-#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -50,11 +46,11 @@ class ChrController final : public rclcpp::Node {
     }
     ik_options_.maximum_iterations = static_cast<std::size_t>(maximum_iterations);
 
-    const std::set<std::string> supported{"hold", "dls_ik", "external"};
-    if (!supported.count(planner_mode_)) {
+    if (planner_mode_ != "hold" && planner_mode_ != "dls_ik" &&
+        planner_mode_ != "external") {
       throw std::runtime_error(
         "unsupported planner_mode '" + planner_mode_ +
-        "'; supported modes are hold, dls_ik and external. RL requires a policy adapter.");
+        "'; supported modes are hold, dls_ik and external");
     }
 
     desired_base_position_ = Eigen::Vector3d(base_position[0], base_position[1], base_position[2]);
@@ -197,7 +193,7 @@ class ChrController final : public rclcpp::Node {
   }
 
   void publish_reference() {
-    // This final projection is a safety invariant shared by every planner mode.
+    // Enforce the level-base constraint for every planner mode.
     desired_base_orientation_ = chr_controller::ChrKinematics::level_yaw_orientation(
       desired_base_orientation_);
     desired_base_angular_velocity_.x() = 0.0;

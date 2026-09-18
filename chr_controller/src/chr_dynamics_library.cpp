@@ -1,6 +1,3 @@
-// Copyright 2026 mrl_nuc
-// SPDX-License-Identifier: Apache-2.0
-
 #include "chr_controller/chr_dynamics_library.hpp"
 
 #include <Eigen/SVD>
@@ -75,9 +72,8 @@ Eigen::Isometry3d ChrKinematics::base_pose(
 
 Eigen::Isometry3d ChrKinematics::tcp_in_world(
     const Eigen::Isometry3d &world_from_base, const JointVector &joint_position) {
-  // This is the exact nominal MJCF body-frame chain in chr_description/arm.xml.
+  // Keep this chain synchronized with chr.xml and arm.xml.
   Eigen::Isometry3d transform = world_from_base;
-  // Keep this transform synchronized with body[name=arm_mount] in chr.xml.
   transform = transform * fixed_transform(
     Eigen::Vector3d(-0.10, 0.0, -0.13), Eigen::Quaterniond::Identity());
   transform = transform * fixed_transform(
@@ -99,53 +95,6 @@ Eigen::Isometry3d ChrKinematics::tcp_in_world(
   transform = transform * fixed_transform(
     Eigen::Vector3d(0.0, 0.0, 0.25), Eigen::Quaterniond::Identity());
   return transform;
-}
-
-Eigen::Matrix3d ChrKinematics::position_jacobian(
-    const Eigen::Isometry3d &world_from_base, const JointVector &joint_position) {
-  Eigen::Matrix3d jacobian;
-  for (Eigen::Index column = 0; column < 3; ++column) {
-    JointVector positive = joint_position;
-    JointVector negative = joint_position;
-    positive[column] += kFiniteDifferenceStep;
-    negative[column] -= kFiniteDifferenceStep;
-    jacobian.col(column) =
-      (tcp_in_world(world_from_base, positive).translation() -
-       tcp_in_world(world_from_base, negative).translation()) /
-      (2.0 * kFiniteDifferenceStep);
-  }
-  return jacobian;
-}
-
-IkResult ChrKinematics::solve_position_dls(
-    const Eigen::Isometry3d &world_from_base,
-    const Eigen::Vector3d &target_position,
-    const JointVector &seed,
-    const IkOptions &options) {
-  IkResult result;
-  result.joint_position = clamp_joints(seed);
-  const double damping_squared = options.damping * options.damping;
-  for (std::size_t iteration = 0; iteration < options.maximum_iterations; ++iteration) {
-    const Eigen::Vector3d error = target_position -
-      tcp_in_world(world_from_base, result.joint_position).translation();
-    result.residual_m = error.norm();
-    result.iterations = iteration;
-    if (result.residual_m <= options.tolerance_m) {
-      result.converged = true;
-      return result;
-    }
-    const Eigen::Matrix3d jacobian = position_jacobian(world_from_base, result.joint_position);
-    JointVector step = jacobian.transpose() *
-      (jacobian * jacobian.transpose() + damping_squared * Eigen::Matrix3d::Identity())
-      .ldlt().solve(error);
-    if (step.norm() > options.maximum_step_rad) {
-      step *= options.maximum_step_rad / step.norm();
-    }
-    result.joint_position = clamp_joints(result.joint_position + step);
-  }
-  result.residual_m = (
-    target_position - tcp_in_world(world_from_base, result.joint_position).translation()).norm();
-  return result;
 }
 
 PoseIkResult ChrKinematics::solve_pose_dls(

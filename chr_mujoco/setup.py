@@ -15,9 +15,8 @@ setup(
     ],
     install_requires=['setuptools', 'numpy', 'mujoco'],
     zip_safe=True,
-    maintainer='mrl_nuc',
-    maintainer_email='mrl_nuc@example.com',
-    description='Thin MuJoCo plant and ROS 2 boundary for CHR.',
-    license='Apache-2.0',
+    maintainer='youjins18',
+    maintainer_email='chldbwls08@seoultech.ac.kr',
+    description='MuJoCo plant and ROS 2 interface for CHR.',
     entry_points={'console_scripts': ['simulator_node=chr_mujoco.simulator_node:main']},
 )

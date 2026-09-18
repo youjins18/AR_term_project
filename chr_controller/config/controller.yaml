@@ -1,5 +1,8 @@
 chr_controller:
   ros__parameters:
+    # hold: publish the configured base pose and joint home position
+    # dls_ik: solve TCP pose commands from /chr/target/tcp_pose
+    # external: validate whole-body commands from /chr/target/whole_body
     planner_mode: hold
     command_hz: 100.0
     default_base_position: [0.0, 0.0, 1.2]

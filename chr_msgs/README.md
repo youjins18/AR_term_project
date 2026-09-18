@@ -6,7 +6,7 @@ encoded as a quaternion, but the current CHR invariant fixes roll and pitch to
 zero. The independent command is therefore
 `[x_b, y_b, z_b, yaw_b, J1, J2, J3]`. Controllers consume only their own fields.
 
-Plant inputs are deliberately separate from references:
+Plant inputs are separate from high-level references:
 
 - `/chr/reference`: desired base pose/twist and arm joint state
 - `/chr/actuator/palletrone`: rotor thrust and tilt-servo angles

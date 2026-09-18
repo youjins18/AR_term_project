@@ -1,14 +1,14 @@
 # 🌲 Cone Harvest Robot (CHR) Simulation
 
-CHR is the Palletrone plus the cone-harvesting arm mounted below its airframe. This
-workspace is a minimal but extensible ROS 2 Humble and MuJoCo control skeleton.
+ROS 2 Humble and MuJoCo simulation of a Palletrone carrying a three-joint
+cone-harvesting arm.
 
 ## Architecture
 
 | Package | Owns |
 |---|---|
 | `chr_description` | composed MuJoCo model and original arm meshes |
-| `chr_msgs` | stable state, reference and actuator contracts |
+| `chr_msgs` | state, reference and actuator messages |
 | `chr_mujoco` | physics stepping and the only plant input boundary |
 | `chr_controller` | constrained whole-body planning, FK/Jacobian/DLS-IK |
 | `palletrone_flight_controller` | base-pose PID, attitude PD, DOB and allocation |
@@ -16,7 +16,7 @@ workspace is a minimal but extensible ROS 2 Humble and MuJoCo control skeleton.
 | `chr_commander` | interactive TCP position and attitude keyboard commands |
 | `bringup` | launch composition |
 
-The data flow is deliberately one-way:
+Controllers write to the plant only through the two actuator topics:
 
 ```text
 /chr/target/* -> chr_controller -> /chr/reference
@@ -30,7 +30,7 @@ The data flow is deliberately one-way:
                                       /chr/state
 ```
 
-`ChrReference` is the authoritative high-level output. It contains base position,
+`ChrReference` is the common high-level command. It contains base position,
 base quaternion, base twist and J1--J3. Palletrone roll and pitch commands are
 always zero, so the independent coordinates are
 `[x_b,y_b,z_b,yaw_b,J1,J2,J3]`.
@@ -49,7 +49,7 @@ ROS 2. Native MuJoCo 3.x is not linked by the controllers.
 
 ## Run
 
-Safe hold mode:
+Hold mode:
 
 ```bash
 ros2 launch bringup simulation.launch.py planner_mode:=hold render:=true
@@ -75,7 +75,7 @@ Position increments are expressed in the world frame; attitude increments use
 the current TCP-local axes. Press `Space` to hold the measured pose, `0` for the
 startup pose, and `Q` or `Esc` to quit.
 
-Whole-body external planner/RL boundary:
+External planner or RL input:
 
 ```bash
 ros2 launch bringup simulation.launch.py planner_mode:=external render:=true
@@ -84,17 +84,22 @@ ros2 launch bringup simulation.launch.py planner_mode:=external render:=true
 Publish `chr_msgs/msg/ChrReference` on `/chr/target/whole_body`. The controller
 normalizes the quaternion and clamps arm joint limits before republishing.
 
-## Safety and extension rules
+## Data logging
+
+Simulation launches record the control and diagnostic topics by default. See
+[`data_logging/README.md`](data_logging/README.md) for bag conversion and MATLAB
+plots. Set `record:=false` to run without recording.
+
+## Design notes
 
 - Default mode is a stationary hover reference and zero arm joints.
-- Watchdogs stop rotor torque and hold/zero arm effort when commands become stale.
+- The arm controller holds the measured joint pose if its reference expires.
+  The simulator zeros actuator effort if low-level commands expire.
 - The current gains and inertia are simulation starting values, not hardware gains.
 - `arm_mount` in `chr_description/mujoco/chr.xml` is the physical attachment
   transform. Mirror any change in `ChrKinematics::tcp_in_world` so DLS-IK keeps
   the same nominal frame chain.
-- RL should publish through the `external` target contract. Do not let a policy
-  write MuJoCo actuators directly; keep limits and low-level control in place.
+- RL policies should publish through the `external` target contract so that
+  joint limits and low-level control remain active.
 - The pose DLS solver owns all seven independent coordinates and uses a weighted
   6x7 Jacobian. Tune its coordinate scales before aggressive flight motion.
-- `third_party/dynamics_gen_chr.py` is a reduced-order reference only. Identify
-  coupled inertial parameters before enabling model-based feedforward or NMPC.

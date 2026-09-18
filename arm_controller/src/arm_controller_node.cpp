@@ -1,8 +1,4 @@
-// Copyright 2026 mrl_nuc
-// SPDX-License-Identifier: Apache-2.0
-
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cmath>
 #include <functional>
@@ -74,7 +70,7 @@ class ArmController final : public rclcpp::Node {
     const bool stale = !have_reference_ ||
       (now() - last_reference_time_).seconds() > reference_timeout_s_;
     if (stale) {
-      // Freezing the measured pose is safer than replaying an expired planner target.
+      // Hold the measured pose when planner updates stop.
       desired_position_ = state_->joint_position;
       desired_velocity_ = {};
       RCLCPP_WARN_THROTTLE(

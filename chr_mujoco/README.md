@@ -1,8 +1,8 @@
 # chr_mujoco
 
-This package is intentionally thin. `MuJoCoPlant` owns model IDs and physics;
+`MuJoCoPlant` owns model IDs and physics;
 `ActuatorInterface` is the only write path into `data.ctrl`; `StateInterface`
-converts truth into ROS messages; `simulator_node` only schedules them. This split
+converts simulation state into ROS messages; `simulator_node` schedules them. This split
 keeps the simulation replaceable by hardware without changing either controller.
 
 The node publishes `/chr/state` and `/joint_states`, subscribes to the two actuator
