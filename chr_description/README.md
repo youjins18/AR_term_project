@@ -16,9 +16,15 @@ three-command-coordinate harvesting arm rigidly attached to its underside.
 The Palletrone `BODY.stl` and `PROP.stl` meshes retain the original TPAM metre
 scale and X-configuration transforms. All arm meshes are copied without geometric
 modification from `cone_harvester_sim`. The attachment transform is the
-`arm_mount` body in `chr.xml`; its provisional Z offset is -0.13 m so that the arm
-sits immediately below the BODY mesh. Replace that transform after measuring the
-mechanical mount.
+`arm_mount` body in `chr.xml`; it is currently `(-0.10, 0, -0.13) m` in the
+Palletrone body frame, so the arm is shifted 10 cm along body -X and remains
+immediately below the BODY mesh. When this transform changes, update the matching
+fixed transform in `chr_controller/src/chr_dynamics_library.cpp` so DLS-IK and
+MuJoCo use identical kinematics.
+
+The visible robot palette is black structure, white printed/housing parts and
+orange propellers/TCP. The desired TCP marker is a blue position sphere plus an
+arrow along the desired TCP frame's local +Z axis.
 
 Frames use MuJoCo conventions: right-handed world with +Z up, free-body
 quaternion `(w,x,y,z)`, positions in metres, angles in radians, forces in newtons.

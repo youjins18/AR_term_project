@@ -14,6 +14,7 @@
 #include "chr_msgs/msg/chr_state.hpp"
 #include "chr_msgs/msg/flight_diagnostics.hpp"
 #include "chr_msgs/msg/palletrone_command.hpp"
+#include "palletrone_flight_controller/thrust_model.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 namespace {
@@ -119,6 +120,13 @@ class PalletroneFlightController final : public rclcpp::Node {
     minimum_thrust_n_ = declare_parameter("minimum_thrust_n", 0.0);
     maximum_thrust_n_ = declare_parameter("maximum_thrust_n", 25.0);
     maximum_servo_angle_rad_ = declare_parameter("maximum_servo_angle_rad", 0.6);
+    pwm_quadratic_n_per_us2_ = declare_parameter(
+      "pwm_quadratic_n_per_us2", 2.0962e-5);
+    pwm_linear_n_per_us_ = declare_parameter("pwm_linear_n_per_us", 0.0085);
+    pwm_constant_n_ = declare_parameter("pwm_constant_n", -36.0347);
+    pwm_min_us_ = declare_parameter("pwm_min_us", 1100.0);
+    pwm_max_us_ = declare_parameter("pwm_max_us", 1900.0);
+    pwm_normalized_limit_ = declare_parameter("pwm_normalized_limit", 0.8);
     reference_timeout_s_ = declare_parameter("reference_timeout_s", 0.5);
     validate_parameters();
 
@@ -160,7 +168,9 @@ class PalletroneFlightController final : public rclcpp::Node {
         dob_cutoff_hz_ <= 0.0 || rotor_radius_m_ <= 0.0 ||
         reaction_coefficient_ <= 0.0 || maximum_servo_angle_rad_ <= 0.0 ||
         reference_timeout_s_ <= 0.0 || minimum_thrust_n_ < 0.0 ||
-        maximum_thrust_n_ <= minimum_thrust_n_) {
+        maximum_thrust_n_ <= minimum_thrust_n_ ||
+        pwm_quadratic_n_per_us2_ <= 0.0 || pwm_max_us_ <= pwm_min_us_ ||
+        pwm_normalized_limit_ <= 0.0 || pwm_normalized_limit_ > 1.0) {
       throw std::runtime_error("invalid physical, rate, timeout, or actuator-limit parameter");
     }
   }
@@ -294,7 +304,9 @@ class PalletroneFlightController final : public rclcpp::Node {
       const double acceleration = (omega[i] - previous_omega_[i]) * control_hz_;
       const double raw_disturbance = inertia_[i] * acceleration - previous_torque_[i];
       disturbance_estimate_[i] += alpha * (raw_disturbance - disturbance_estimate_[i]);
-      if (dob_enabled_) body_torque[i] -= dob_gain_[i] * disturbance_estimate_[i];
+      if (dob_enabled_) {
+        body_torque[i] -= dob_gain_[i] * disturbance_estimate_[i];
+      }
       previous_omega_[i] = omega[i];
       previous_torque_[i] = nominal_torque[i];
     }
@@ -316,10 +328,21 @@ class PalletroneFlightController final : public rclcpp::Node {
     diagnostics.desired_wrench.torque.x = body_torque[0];
     diagnostics.desired_wrench.torque.y = body_torque[1];
     diagnostics.desired_wrench.torque.z = body_torque[2];
-    diagnostics.disturbance_estimate.torque.x = disturbance_estimate_[0];
-    diagnostics.disturbance_estimate.torque.y = disturbance_estimate_[1];
-    diagnostics.disturbance_estimate.torque.z = disturbance_estimate_[2];
+    diagnostics.nominal_torque.x = nominal_torque[0];
+    diagnostics.nominal_torque.y = nominal_torque[1];
+    diagnostics.nominal_torque.z = nominal_torque[2];
+    diagnostics.dob_torque.x = disturbance_estimate_[0];
+    diagnostics.dob_torque.y = disturbance_estimate_[1];
+    diagnostics.dob_torque.z = disturbance_estimate_[2];
     diagnostics.allocated_thrust = allocation.thrust;
+    const palletrone_flight_controller::PwmCalibration pwm_calibration{
+      pwm_quadratic_n_per_us2_, pwm_linear_n_per_us_, pwm_constant_n_,
+      pwm_min_us_, pwm_max_us_, pwm_normalized_limit_};
+    for (std::size_t i = 0; i < allocation.thrust.size(); ++i) {
+      diagnostics.allocated_pwm_us[i] =
+        palletrone_flight_controller::thrust_to_pwm_us(
+        allocation.thrust[i], pwm_calibration);
+    }
     diagnostics.allocated_servo_angle = allocation.servo;
     diagnostics.allocation_residual_norm = allocation.residual;
     diagnostics.saturated = allocation.saturated;
@@ -335,6 +358,12 @@ class PalletroneFlightController final : public rclcpp::Node {
   double minimum_thrust_n_{0.0};
   double maximum_thrust_n_{25.0};
   double maximum_servo_angle_rad_{0.6};
+  double pwm_quadratic_n_per_us2_{2.0962e-5};
+  double pwm_linear_n_per_us_{0.0085};
+  double pwm_constant_n_{-36.0347};
+  double pwm_min_us_{1100.0};
+  double pwm_max_us_{1900.0};
+  double pwm_normalized_limit_{0.8};
   double reference_timeout_s_{0.5};
   bool dob_enabled_{false};
   Vec3 position_kp_{};

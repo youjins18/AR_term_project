@@ -23,7 +23,10 @@ def make_chr_state(snapshot: PlantSnapshot, stamp) -> ChrState:
     message.joint_velocity = snapshot.joint_velocity.tolist()
     message.rotor_tilt = snapshot.rotor_tilt.tolist()
     message.rotor_thrust = snapshot.rotor_thrust.tolist()
-    message.joint_bias_torque = snapshot.joint_bias_torque.tolist()
+    message.joint_torque_meas = snapshot.joint_torque_meas.tolist()
+    message.joint_torque_dyn = snapshot.joint_torque_dyn.tolist()
+    message.joint_torque_grav = snapshot.joint_torque_grav.tolist()
+    message.joint_torque_command = snapshot.joint_torque_command.tolist()
     (message.tcp_pose.position.x, message.tcp_pose.position.y,
      message.tcp_pose.position.z) = snapshot.tcp_position
     (message.tcp_pose.orientation.w, message.tcp_pose.orientation.x,
@@ -37,5 +40,5 @@ def make_joint_state(snapshot: PlantSnapshot, stamp) -> JointState:
     message.name = list(ARM_JOINTS)
     message.position = snapshot.joint_position.tolist()
     message.velocity = snapshot.joint_velocity.tolist()
-    message.effort = snapshot.joint_bias_torque.tolist()
+    message.effort = snapshot.joint_torque_meas.tolist()
     return message

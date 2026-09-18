@@ -24,6 +24,10 @@ An unimplemented mode fails explicitly. RL should be introduced as a separate
 policy adapter publishing `ChrReference` to the external input, keeping inference,
 safety projection and low-level control independently testable.
 
+`/chr/diagnostics/ik` publishes the latest DLS target status, convergence flag,
+iteration count, position/orientation residual, damping, minimum singular value
+and condition number for MATLAB analysis.
+
 `libchr_dynamics.so` contains the exact nominal MJCF kinematic frame chain,
 numerical position and pose Jacobians, joint limits, position DLS and weighted
 whole-body pose DLS. Dynamic model generation lives under `third_party` and is

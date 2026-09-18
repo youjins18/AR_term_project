@@ -20,4 +20,12 @@ palletrone_flight_controller:
     minimum_thrust_n: 0.0
     maximum_thrust_n: 25.0
     maximum_servo_angle_rad: 0.6
+    # Calibration copied from PX4-Palletrone_firmware/ControlAllocationUtils.cpp:
+    # thrust [N] = a*pwm_us^2 + b*pwm_us + c.
+    pwm_quadratic_n_per_us2: 0.000020962
+    pwm_linear_n_per_us: 0.0085
+    pwm_constant_n: -36.0347
+    pwm_min_us: 1100.0
+    pwm_max_us: 1900.0
+    pwm_normalized_limit: 0.8
     reference_timeout_s: 0.5

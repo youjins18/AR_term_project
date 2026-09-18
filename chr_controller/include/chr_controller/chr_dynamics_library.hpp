@@ -39,6 +39,8 @@ struct PoseIkResult {
   JointVector joint_position{JointVector::Zero()};
   double position_residual_m{0.0};
   double orientation_residual_rad{0.0};
+  double minimum_singular_value{0.0};
+  double condition_number{0.0};
   std::size_t iterations{0};
   bool converged{false};
 };

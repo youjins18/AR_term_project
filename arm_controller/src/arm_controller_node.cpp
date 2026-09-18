@@ -82,8 +82,8 @@ class ArmController final : public rclcpp::Node {
     }
 
     const auto clamped_position = arm_controller::clamp_joint_position(desired_position_);
-    const auto feedforward = arm_controller::select_bias_feedforward(
-      state_->joint_bias_torque, gravity_compensation_);
+    const auto feedforward = arm_controller::select_gravity_feedforward(
+      state_->joint_torque_grav, gravity_compensation_);
     chr_msgs::msg::ArmCommand command;
     command.header.stamp = now();
     command.header.frame_id = "arm_mount";

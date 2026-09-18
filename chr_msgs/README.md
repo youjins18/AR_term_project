@@ -12,3 +12,12 @@ Plant inputs are deliberately separate from references:
 - `/chr/actuator/palletrone`: rotor thrust and tilt-servo angles
 - `/chr/actuator/arm`: position-loop arm command
 - `/chr/state`: simulator or hardware state estimate
+- `/chr/diagnostics/flight`: final force, nominal/final/DOB-estimated torque, allocator,
+  calibrated PWM and servo/thrust outputs
+- `/chr/diagnostics/ik`: DLS convergence, residual and conditioning metrics
+
+`ChrState` reports four explicit arm torque definitions: ideal joint-sensor
+measurement (`joint_torque_meas`), model `M(q)qdd+C(q,dq)+G(q)` inverse dynamics
+(`joint_torque_dyn`), gravity only (`joint_torque_grav`), and the saturated
+actuator input (`joint_torque_command`). TCP pose is read through MuJoCo frame
+sensors rather than directly copied from a controller target.

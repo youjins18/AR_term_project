@@ -89,8 +89,9 @@ normalizes the quaternion and clamps arm joint limits before republishing.
 - Default mode is a stationary hover reference and zero arm joints.
 - Watchdogs stop rotor torque and hold/zero arm effort when commands become stale.
 - The current gains and inertia are simulation starting values, not hardware gains.
-- `arm_mount` in `chr_description/mujoco/chr.xml` is the single calibration point
-  for the physical attachment transform.
+- `arm_mount` in `chr_description/mujoco/chr.xml` is the physical attachment
+  transform. Mirror any change in `ChrKinematics::tcp_in_world` so DLS-IK keeps
+  the same nominal frame chain.
 - RL should publish through the `external` target contract. Do not let a policy
   write MuJoCo actuators directly; keep limits and low-level control in place.
 - The pose DLS solver owns all seven independent coordinates and uses a weighted

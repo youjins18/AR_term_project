@@ -28,6 +28,7 @@ RECORDED_TOPICS = (
     '/chr/actuator/palletrone',
     '/chr/actuator/arm',
     '/chr/diagnostics/flight',
+    '/chr/diagnostics/ik',
     '/joint_states',
 )
 

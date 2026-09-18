@@ -17,3 +17,9 @@ ACTUATORS = {
     'rotor_servos': tuple(f'rotor_{i}_tilt_act' for i in range(4)),
     'arm': ('J1_act', 'J2_act', 'J3_act'),
 }
+
+SENSORS = {
+    'arm_torque': tuple(f'J{i}_torque_sensor' for i in range(1, 4)),
+    'tcp_position': ('tcp_position_sensor',),
+    'tcp_orientation': ('tcp_orientation_sensor',),
+}

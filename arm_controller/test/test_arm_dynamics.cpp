@@ -11,10 +11,10 @@ TEST(ArmDynamics, JointPositionIsClampedToMjcfLimits) {
   EXPECT_DOUBLE_EQ(result[2], -1.5708);
 }
 
-TEST(ArmDynamics, BiasFeedforwardHasExplicitEnableSwitch) {
-  const arm_controller::JointVector bias{1.0, -2.0, 3.0};
-  EXPECT_EQ(arm_controller::select_bias_feedforward(bias, true), bias);
+TEST(ArmDynamics, GravityFeedforwardHasExplicitEnableSwitch) {
+  const arm_controller::JointVector gravity{1.0, -2.0, 3.0};
+  EXPECT_EQ(arm_controller::select_gravity_feedforward(gravity, true), gravity);
   EXPECT_EQ(
-    arm_controller::select_bias_feedforward(bias, false),
+    arm_controller::select_gravity_feedforward(gravity, false),
     arm_controller::JointVector{});
 }

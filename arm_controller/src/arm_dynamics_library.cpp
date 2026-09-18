@@ -17,8 +17,8 @@ JointVector clamp_joint_position(const JointVector &position) {
   return output;
 }
 
-JointVector select_bias_feedforward(const JointVector &bias_torque, bool enabled) {
-  return enabled ? bias_torque : JointVector{};
+JointVector select_gravity_feedforward(const JointVector &gravity_torque, bool enabled) {
+  return enabled ? gravity_torque : JointVector{};
 }
 
 }  // namespace arm_controller

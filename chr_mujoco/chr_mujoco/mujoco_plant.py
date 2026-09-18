@@ -13,6 +13,7 @@ from .model_names import (
     ARM_JOINTS,
     BASE_JOINT,
     ROTOR_TILT_JOINTS,
+    SENSORS,
     TARGET_MARKER_BODY,
     TCP_SITE,
 )
@@ -29,7 +30,10 @@ class PlantSnapshot:
     joint_velocity: np.ndarray
     rotor_tilt: np.ndarray
     rotor_thrust: np.ndarray
-    joint_bias_torque: np.ndarray
+    joint_torque_meas: np.ndarray
+    joint_torque_dyn: np.ndarray
+    joint_torque_grav: np.ndarray
+    joint_torque_command: np.ndarray
     tcp_position: np.ndarray
     tcp_quaternion: np.ndarray
 
@@ -46,6 +50,8 @@ class MuJoCoPlant:
                                       'initial joint position')
         self.model = mujoco.MjModel.from_xml_path(model_path)
         self.data = mujoco.MjData(self.model)
+        self._gravity_data = mujoco.MjData(self.model)
+        self._mass_matrix = np.empty((self.model.nv, self.model.nv))
         self.model.opt.timestep = float(timestep)
 
         self._base_id = self._id(mujoco.mjtObj.mjOBJ_JOINT, BASE_JOINT)
@@ -56,6 +62,10 @@ class MuJoCoPlant:
         self._actuator_ids = {
             name: self._id(mujoco.mjtObj.mjOBJ_ACTUATOR, name)
             for group in ACTUATORS.values() for name in group
+        }
+        self._sensor_ids = {
+            name: self._id(mujoco.mjtObj.mjOBJ_SENSOR, name)
+            for group in SENSORS.values() for name in group
         }
         self._tcp_id = self._id(mujoco.mjtObj.mjOBJ_SITE, TCP_SITE)
         marker_id = self._id(mujoco.mjtObj.mjOBJ_BODY, TARGET_MARKER_BODY)
@@ -69,6 +79,9 @@ class MuJoCoPlant:
         ], dtype=int)
         self._rotor_actuator_ids = np.asarray([
             self._actuator_ids[name] for name in ACTUATORS['rotors']
+        ], dtype=int)
+        self._arm_actuator_ids = np.asarray([
+            self._actuator_ids[name] for name in ACTUATORS['arm']
         ], dtype=int)
 
         base_qpos = int(self.model.jnt_qposadr[self._base_id])
@@ -98,6 +111,15 @@ class MuJoCoPlant:
 
     def _qvel_address(self, joint_name: str) -> int:
         return int(self.model.jnt_dofadr[self._joint_ids[joint_name]])
+
+    def _sensor_data(self, sensor_name: str, expected_size: int) -> np.ndarray:
+        sensor_id = self._sensor_ids[sensor_name]
+        size = int(self.model.sensor_dim[sensor_id])
+        if size != expected_size:
+            raise ValueError(
+                f'MuJoCo sensor {sensor_name} has size {size}, expected {expected_size}')
+        address = int(self.model.sensor_adr[sensor_id])
+        return self.data.sensordata[address:address + size].copy()
 
     def _clip_and_set(self, actuator_names: Iterable[str], values: Iterable[float]) -> None:
         names = tuple(actuator_names)
@@ -152,8 +174,21 @@ class MuJoCoPlant:
     def snapshot(self) -> PlantSnapshot:
         base_qpos = int(self.model.jnt_qposadr[self._base_id])
         base_qvel = int(self.model.jnt_dofadr[self._base_id])
-        tcp_quaternion = np.empty(4)
-        mujoco.mju_mat2Quat(tcp_quaternion, self.data.site_xmat[self._tcp_id])
+        torque_meas = np.asarray([
+            self._sensor_data(name, 1)[0] for name in SENSORS['arm_torque']])
+        mujoco.mj_fullM(self.model, self._mass_matrix, self.data.qM)
+        torque_dyn = (
+            self._mass_matrix @ self.data.qacc + self.data.qfrc_bias
+        )[self._joint_qvel_addresses].copy()
+
+        # qfrc_bias with zero velocity is the gravity term. Use separate data so
+        # this diagnostic calculation cannot perturb the simulated plant.
+        self._gravity_data.qpos[:] = self.data.qpos
+        self._gravity_data.qvel[:] = 0.0
+        self._gravity_data.qacc[:] = 0.0
+        mujoco.mj_forward(self.model, self._gravity_data)
+        torque_grav = self._gravity_data.qfrc_bias[
+            self._joint_qvel_addresses].copy()
         return PlantSnapshot(
             time=float(self.data.time),
             base_position=self.data.qpos[base_qpos:base_qpos + 3].copy(),
@@ -163,8 +198,11 @@ class MuJoCoPlant:
             joint_position=self.data.qpos[self._joint_qpos_addresses].copy(),
             joint_velocity=self.data.qvel[self._joint_qvel_addresses].copy(),
             rotor_tilt=self.data.qpos[self._tilt_qpos_addresses].copy(),
-            rotor_thrust=self.data.ctrl[self._rotor_actuator_ids].copy(),
-            joint_bias_torque=self.data.qfrc_bias[self._joint_qvel_addresses].copy(),
-            tcp_position=self.data.site_xpos[self._tcp_id].copy(),
-            tcp_quaternion=tcp_quaternion,
+            rotor_thrust=self.data.actuator_force[self._rotor_actuator_ids].copy(),
+            joint_torque_meas=torque_meas,
+            joint_torque_dyn=torque_dyn,
+            joint_torque_grav=torque_grav,
+            joint_torque_command=self.data.ctrl[self._arm_actuator_ids].copy(),
+            tcp_position=self._sensor_data(SENSORS['tcp_position'][0], 3),
+            tcp_quaternion=self._sensor_data(SENSORS['tcp_orientation'][0], 4),
         )

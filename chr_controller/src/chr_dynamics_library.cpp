@@ -3,10 +3,13 @@
 
 #include "chr_controller/chr_dynamics_library.hpp"
 
+#include <Eigen/SVD>
+
 #include <Eigen/Cholesky>
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace chr_controller {
 namespace {
@@ -74,8 +77,9 @@ Eigen::Isometry3d ChrKinematics::tcp_in_world(
     const Eigen::Isometry3d &world_from_base, const JointVector &joint_position) {
   // This is the exact nominal MJCF body-frame chain in chr_description/arm.xml.
   Eigen::Isometry3d transform = world_from_base;
+  // Keep this transform synchronized with body[name=arm_mount] in chr.xml.
   transform = transform * fixed_transform(
-    Eigen::Vector3d(0.0, 0.0, -0.13), Eigen::Quaterniond::Identity());
+    Eigen::Vector3d(-0.10, 0.0, -0.13), Eigen::Quaterniond::Identity());
   transform = transform * fixed_transform(
     Eigen::Vector3d::Zero(), Eigen::Quaterniond(0.0, 1.0, 0.0, 0.0));
   transform = transform * fixed_transform(
@@ -167,11 +171,6 @@ PoseIkResult ChrKinematics::solve_pose_dls(
     result.position_residual_m = position_error.norm();
     result.orientation_residual_rad = orientation_error.norm();
     result.iterations = iteration;
-    if (result.position_residual_m <= options.tolerance_m &&
-        result.orientation_residual_rad <= options.orientation_tolerance_rad) {
-      result.converged = true;
-      return result;
-    }
 
     TaskJacobian jacobian;
     for (Eigen::Index column = 0; column < kCoordinateCount; ++column) {
@@ -212,6 +211,17 @@ PoseIkResult ChrKinematics::solve_pose_dls(
       options.base_translation_scale, options.base_yaw_scale, 1.0, 1.0, 1.0;
     const TaskJacobian weighted_jacobian =
       jacobian * coordinate_scale.asDiagonal();
+    const Eigen::JacobiSVD<TaskJacobian> svd(weighted_jacobian);
+    const auto singular_values = svd.singularValues();
+    result.minimum_singular_value = singular_values[singular_values.size() - 1];
+    result.condition_number = result.minimum_singular_value > 1e-12 ?
+      singular_values[0] / result.minimum_singular_value :
+      std::numeric_limits<double>::infinity();
+    if (result.position_residual_m <= options.tolerance_m &&
+        result.orientation_residual_rad <= options.orientation_tolerance_rad) {
+      result.converged = true;
+      return result;
+    }
     CoordinateVector step = coordinate_scale.asDiagonal() *
       weighted_jacobian.transpose() *
       (weighted_jacobian * weighted_jacobian.transpose() +

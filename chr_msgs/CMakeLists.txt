@@ -8,6 +8,7 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ArmCommand.msg"
+  "msg/ChrDiagnostics.msg"
   "msg/ChrReference.msg"
   "msg/ChrState.msg"
   "msg/FlightDiagnostics.msg"

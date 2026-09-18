@@ -1,0 +1,10 @@
+std_msgs/Header header
+string planner_mode
+bool target_active
+bool converged
+uint32 iterations
+float64 position_residual_m
+float64 orientation_residual_rad
+float64 damping
+float64 minimum_singular_value
+float64 condition_number

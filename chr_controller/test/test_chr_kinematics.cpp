@@ -17,7 +17,7 @@ TEST(ChrKinematics, HomePoseMatchesMjcf) {
       Eigen::Vector3d(0.0, 0.0, 1.2), Eigen::Quaterniond::Identity()),
     Eigen::Vector3d::Zero());
 
-  EXPECT_NEAR(pose.translation().x(), -3.66401025e-6, 1e-10);
+  EXPECT_NEAR(pose.translation().x(), -0.10000366401025, 1e-10);
   EXPECT_NEAR(pose.translation().y(), -9.18311789e-7, 1e-10);
   EXPECT_NEAR(pose.translation().z(), 0.27775, 1e-10);
 }
@@ -48,7 +48,27 @@ TEST(ChrKinematics, PoseIkAlwaysReturnsLevelBase) {
   EXPECT_TRUE(result.converged);
   EXPECT_LT(result.position_residual_m, options.tolerance_m);
   EXPECT_LT(result.orientation_residual_rad, options.orientation_tolerance_rad);
+  EXPECT_GE(result.minimum_singular_value, 0.0);
+  EXPECT_GE(result.condition_number, 0.0);
   EXPECT_NEAR(result.base_orientation.x(), 0.0, 1e-12);
   EXPECT_NEAR(result.base_orientation.y(), 0.0, 1e-12);
+}
+
+TEST(ChrKinematics, PoseIkReportsConditioningWhenTargetIsAlreadyReached) {
+  const Eigen::Vector3d base_position(0.0, 0.0, 1.2);
+  const Eigen::Quaterniond base_orientation = Eigen::Quaterniond::Identity();
+  const Eigen::Vector3d joints = Eigen::Vector3d::Zero();
+  const auto target_pose = ChrKinematics::tcp_in_world(
+    ChrKinematics::base_pose(base_position, base_orientation), joints);
+
+  chr_controller::IkOptions options;
+  const auto result = ChrKinematics::solve_pose_dls(
+    base_position, base_orientation, target_pose, joints, options);
+
+  EXPECT_TRUE(result.converged);
+  EXPECT_EQ(result.iterations, 0U);
+  EXPECT_GT(result.minimum_singular_value, 0.0);
+  EXPECT_TRUE(std::isfinite(result.condition_number));
+  EXPECT_GT(result.condition_number, 1.0);
 }
 }  // namespace

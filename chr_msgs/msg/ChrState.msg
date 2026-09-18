@@ -5,5 +5,8 @@ float64[3] joint_position
 float64[3] joint_velocity
 float64[4] rotor_tilt
 float64[4] rotor_thrust
-float64[3] joint_bias_torque
+float64[3] joint_torque_meas
+float64[3] joint_torque_dyn
+float64[3] joint_torque_grav
+float64[3] joint_torque_command
 geometry_msgs/Pose tcp_pose

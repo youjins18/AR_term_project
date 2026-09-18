@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "chr_controller/chr_dynamics_library.hpp"
+#include "chr_msgs/msg/chr_diagnostics.hpp"
 #include "chr_msgs/msg/chr_reference.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -72,6 +73,8 @@ class ChrController final : public rclcpp::Node {
       std::bind(&ChrController::receive_external_target, this, std::placeholders::_1));
     reference_publisher_ = create_publisher<chr_msgs::msg::ChrReference>(
       "/chr/reference", 1);
+    diagnostics_publisher_ = create_publisher<chr_msgs::msg::ChrDiagnostics>(
+      "/chr/diagnostics/ik", 1);
     timer_ = create_wall_timer(
       std::chrono::duration<double>(1.0 / command_hz_),
       std::bind(&ChrController::publish_reference, this));
@@ -131,6 +134,13 @@ class ChrController final : public rclcpp::Node {
     desired_base_orientation_ = chr_controller::ChrKinematics::level_yaw_orientation(
       result.base_orientation);
     desired_joint_position_ = result.joint_position;
+    target_active_ = true;
+    ik_converged_ = result.converged;
+    ik_iterations_ = result.iterations;
+    ik_position_residual_m_ = result.position_residual_m;
+    ik_orientation_residual_rad_ = result.orientation_residual_rad;
+    ik_minimum_singular_value_ = result.minimum_singular_value;
+    ik_condition_number_ = result.condition_number;
     if (result.converged) {
       RCLCPP_INFO(
         get_logger(),
@@ -183,6 +193,7 @@ class ChrController final : public rclcpp::Node {
       0.0, 0.0, target->base_twist.angular.z);
     desired_joint_position_ = chr_controller::ChrKinematics::clamp_joints(joint_position);
     desired_joint_velocity_ = joint_velocity;
+    target_active_ = false;
   }
 
   void publish_reference() {
@@ -213,6 +224,19 @@ class ChrController final : public rclcpp::Node {
     }
     reference.source = planner_mode_;
     reference_publisher_->publish(reference);
+
+    chr_msgs::msg::ChrDiagnostics diagnostics;
+    diagnostics.header = reference.header;
+    diagnostics.planner_mode = planner_mode_;
+    diagnostics.target_active = target_active_;
+    diagnostics.converged = ik_converged_;
+    diagnostics.iterations = static_cast<uint32_t>(ik_iterations_);
+    diagnostics.position_residual_m = ik_position_residual_m_;
+    diagnostics.orientation_residual_rad = ik_orientation_residual_rad_;
+    diagnostics.damping = ik_options_.damping;
+    diagnostics.minimum_singular_value = ik_minimum_singular_value_;
+    diagnostics.condition_number = ik_condition_number_;
+    diagnostics_publisher_->publish(diagnostics);
   }
 
   std::string planner_mode_;
@@ -224,9 +248,17 @@ class ChrController final : public rclcpp::Node {
   Eigen::Vector3d desired_base_angular_velocity_{Eigen::Vector3d::Zero()};
   chr_controller::JointVector desired_joint_position_{chr_controller::JointVector::Zero()};
   chr_controller::JointVector desired_joint_velocity_{chr_controller::JointVector::Zero()};
+  bool target_active_{false};
+  bool ik_converged_{false};
+  std::size_t ik_iterations_{0};
+  double ik_position_residual_m_{0.0};
+  double ik_orientation_residual_rad_{0.0};
+  double ik_minimum_singular_value_{0.0};
+  double ik_condition_number_{0.0};
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr tcp_target_subscriber_;
   rclcpp::Subscription<chr_msgs::msg::ChrReference>::SharedPtr external_target_subscriber_;
   rclcpp::Publisher<chr_msgs::msg::ChrReference>::SharedPtr reference_publisher_;
+  rclcpp::Publisher<chr_msgs::msg::ChrDiagnostics>::SharedPtr diagnostics_publisher_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
